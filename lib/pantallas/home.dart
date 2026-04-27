@@ -191,7 +191,7 @@ class _PantallaHomeState extends State<PantallaHome> {
               ),
               const SizedBox(height: 16),
 
-              // TEXTO DEL BANNER 
+              // TEXTO DEL BANNER 23
               const Text(
                 '¿Sabías qué?',
                 style: TextStyle(
