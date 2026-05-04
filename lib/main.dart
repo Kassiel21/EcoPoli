@@ -3,11 +3,15 @@ import 'config/supabase.dart';
 import 'config/paleta_colores.dart';
 import 'pantallas/login.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
   await SupabaseConfig.initialize();   // Conectamos con Supabase 
   runApp(const MyApp());
+  OneSignal.Debug.setLogLevel(OSLogLevel.verbose); //ver errores en consola
+  OneSignal.initialize("40ecfb90-36bd-4564-b670-b12b7e48d65e"); //ID que da OneSignal al crear el proyecto 
+  OneSignal.Notifications.requestPermission(true); //permiso al usuario para enviarle notificaciones
 }
 
 class MyApp extends StatefulWidget {

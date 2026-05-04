@@ -58,7 +58,7 @@ class _PantallaRegistroState extends State<PantallaRegistro> {
     if (error != null) {
       setState(() => _mensajeError = error);
     } else {
-      // Registro exitoso: navegación en Paso 7
+      // Registro exitoso
       if (mounted) {
         showDialog(
           context: context,

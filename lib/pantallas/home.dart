@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
 import 'package:eco_poli/servicios/autenticacion.dart';
+import 'package:eco_poli/config/supabase.dart';
+import 'package:eco_poli/pantallas/carrito.dart';
+import 'package:eco_poli/pantallas/notificaciones.dart';
+import 'package:eco_poli/pantallas/mi_impacto.dart';
 
 class PantallaHome extends StatefulWidget {
   const PantallaHome({super.key});
@@ -14,93 +18,206 @@ class _PantallaHomeState extends State<PantallaHome> {
   final _servicioAuth = Autenticacion();
   String _nombre = '';
   int _paginaActual = 0;
+  int _puntos = 0; 
+  List<dynamic> _productos = []; 
+  List<dynamic> _productosFiltrados = [];
+  List<Map<String, dynamic>> _carrito = [];
 
   @override
   void initState() {
     super.initState();
     _cargarNombre();
+    _cargarProductos();
   }
 
   Future<void> _cargarNombre() async {
     final nombre = await _servicioAuth.obtenerNombreUsuario();
-    setState(() => _nombre = nombre);
+    int puntosObtenidos = 0;
+
+    try {
+      final authId = SupabaseConfig.client.auth.currentUser?.id;
+      if (authId != null) {
+        final datos = await SupabaseConfig.client
+            .from('usuarios')
+            .select('cant_puntos')
+            .eq('auth_id', authId)
+            .single();
+        puntosObtenidos = datos['cant_puntos'] ?? 0;
+      }
+    } catch (e) {
+      debugPrint('Error obteniendo puntos: $e');
+    }
+
+    setState(() {
+      _nombre = nombre;
+      _puntos = puntosObtenidos;
+    });
   }
 
-  // ════════════════════════════════════════════════════════
+  Future<void> _cargarProductos() async {
+    try {
+      // Traemos todos los productos de la base
+      final lista = await SupabaseConfig.client
+      .from('productos').select('id_producto, nombre, descripcion, puntos_costo, stock');
+      
+      setState(() {
+        _productos = lista;
+        _productosFiltrados = lista; // Al inicio mostramos todos
+      });
+    } catch (e) {
+      debugPrint('Error obteniendo productos: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error al cargar el catálogo')),
+      );
+    }
+  }
+
+  //Función para el Pull-to-Refresh
+  Future<void> _refrescarPantalla() async {
+    // Future.wait ejecuta ambas tareas al mismo tiempo para que sea más rápido
+    await Future.wait([
+      _cargarNombre(),    // Recarga los puntos
+      _cargarProductos(), // Recarga el catálogo
+    ]);
+  }
+
+  void _buscarProducto(String texto) {
+    setState(() {
+      if (texto.isEmpty) {
+        _productosFiltrados = _productos;
+      } else {
+        _productosFiltrados = _productos.where((prod) {
+          final nombreProd = prod['nombre'].toString().toLowerCase(); 
+          return nombreProd.contains(texto.toLowerCase());
+        }).toList();
+      }
+    });
+  }
+
+  void _agregarAlCarrito(Map<String, dynamic> producto, {int cantidad=1}) {
+    setState(() {
+      //buscamos si el producto ya está en el carrito usando su nombre
+      int index = _carrito.indexWhere((item) => item['nombre'] == producto['nombre']);
+      if (index != -1) {
+        // Si YA EXISTE
+        _carrito[index]['cantidad'] = (_carrito[index]['cantidad'] ?? 1) + cantidad;
+      } else {
+        // Si NO EXISTE, 
+        Map<String, dynamic> nuevoItem = Map<String, dynamic>.from(producto);
+        nuevoItem['cantidad'] = cantidad;
+        _carrito.add(nuevoItem);
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${producto['nombre']} añadido a tu carrito'),
+        backgroundColor: PaletaColores.primary,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 1),
+      ),
+    );
+  }
+
+  // suma las cantidades reales de todo el carrito
+  int _obtenerTotalItemsCarrito() {
+    int total = 0;
+    for (var item in _carrito) {
+      total += (item['cantidad'] as int? ?? 1);
+    }
+    return total;
+  }
+
   // UI
-  // ════════════════════════════════════════════════════════
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      // Quitamos el SafeArea global para que el color verde del Header 
-      // llegue hasta la barra de estado (donde está la hora y batería del celular)
-      backgroundColor: PaletaColores.background,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          
-          // ── 1. HEADER FUSIONADO (Estilo PedidosYa) ─────────────
-          _headerFusionado(),
+  
+  Widget _vistaHome() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // HEADER FUSIONADO 
+        _headerFusionado(),
+        const SizedBox(height: 20),
 
-          const SizedBox(height: 20),
-
-          // ── 2. PUNTOS ACUMULADOS ─────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Productos',
+        // PUNTOS ACUMULADOS 
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Productos',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: PaletaColores.textPrimary,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: PaletaColores.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '🪙 $_puntos Puntos',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: PaletaColores.textPrimary,
+                    color: PaletaColores.primary,
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: PaletaColores.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '🪙 0 Puntos',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: PaletaColores.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+        ),
+        const SizedBox(height: 16),
 
-          // ──  GRID DE PRODUCTOS ─────────────────────────────────
-          Expanded(
+        // GRID DE PRODUCTOS 
+        Expanded(
+          child: RefreshIndicator(
+            color: PaletaColores.primary,
+            backgroundColor: Colors.white,
+            onRefresh: _refrescarPantalla,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: GridView.builder(
-                padding: const EdgeInsets.only(bottom: 20), // Espacio al final al hacer scroll
+                padding: const EdgeInsets.only(bottom: 20), 
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
                   childAspectRatio: 0.85,
                 ),
-                itemCount: 6,
+                itemCount: _productosFiltrados.length,
                 itemBuilder: (context, index) {
-                  return _tarjetaProducto();
+                  final productoActual = _productosFiltrados[index];
+                  return _tarjetaProducto(productoActual);
                 },
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
 
-      // ── BARRA INFERIOR ──────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    //  arreglo con todas las pantallas del menú inferior
+    final List<Widget> pantallasDelMenu = [
+      _vistaHome(),                                    // Índice 0: Icono Home
+      const Center(child: Text('📍 Bares (Próximamente)')),     // Índice 1: Icono Ubicación
+      const PantallaImpacto(),                                  // Índice 2: Icono Calendario (¡NUEVA!)
+      const Center(child: Text('🏆 Retos (Próximamente)')),      // Índice 3: Icono Trofeo
+      const Center(child: Text('👤 Perfil (Próximamente)')),    // Índice 4: Icono Persona
+    ];
+
+    return Scaffold(
+      backgroundColor: PaletaColores.background,
+      // body cambia según el botón presionado
+      body: pantallasDelMenu[_paginaActual], 
+
+      // BARRA INFERIOR 
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _paginaActual,
         onTap: (index) => setState(() => _paginaActual = index),
@@ -110,14 +227,14 @@ class _PantallaHomeState extends State<PantallaHome> {
         showSelectedLabels: true,
         showUnselectedLabels: true,
         iconSize: 28,
-        selectedFontSize: 13,
+        selectedFontSize: 12,
         unselectedFontSize: 12,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.location_on_outlined), activeIcon: Icon(Icons.location_on), label: 'Mapa'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), activeIcon: Icon(Icons.calendar_today), label: 'Retos'),
-          BottomNavigationBarItem(icon: Icon(Icons.emoji_events_outlined), activeIcon: Icon(Icons.emoji_events), label: 'Canjes'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Perfil'),
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.location_on_outlined), activeIcon: Icon(Icons.location_on), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), activeIcon: Icon(Icons.calendar_today), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.emoji_events_outlined), activeIcon: Icon(Icons.emoji_events), label: ''),
+          BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: ''),
         ],
       ),
     );
@@ -149,7 +266,8 @@ class _PantallaHomeState extends State<PantallaHome> {
           ),
         ],
       ),
-      // SafeArea SOLO aquí adentro, para que proteja los textos de la cámara del celular
+
+      // SafeArea 
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -177,13 +295,44 @@ class _PantallaHomeState extends State<PantallaHome> {
                     children: [
                       IconButton(
                         iconSize: 28,
-                        icon: const Icon(Icons.shopping_cart_outlined, color: Colors.white),
-                        onPressed: () {},
+                        icon: Badge(
+                          // Solo se muestra si el total es mayor a 0
+                          isLabelVisible: _obtenerTotalItemsCarrito() > 0, 
+                          label: Text(
+                            // Mostramos el total real sumado
+                            '${_obtenerTotalItemsCarrito()}', 
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                          backgroundColor: PaletaColores.error,
+                          child: const Icon(Icons.shopping_cart_outlined, color: Colors.white),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => PantallaCarrito(
+                                carrito: _carrito,
+                                puntosUsuario: _puntos,
+                              ),
+                            ),
+                          ).then((_) {
+                            _cargarNombre(); 
+                            setState(() {}); 
+                          });
+                        },
                       ),
+
                       IconButton(
                         iconSize: 28,
                         icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-                        onPressed: () {},
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const PantallaNotificaciones(),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -224,6 +373,7 @@ class _PantallaHomeState extends State<PantallaHome> {
                   ],
                 ),
                 child: TextField(
+                  onChanged: _buscarProducto,
                   style: const TextStyle(fontSize: 16),
                   decoration: InputDecoration(
                     hintText: 'Buscar productos...',
@@ -250,99 +400,274 @@ class _PantallaHomeState extends State<PantallaHome> {
       ),
     );
   }
+  
+  // ── MOSTRAR DETALLE DEL PRODUCTO (panel inferior) ─────────
+  void _mostrarDetalleProducto(Map<String, dynamic> producto) {
+    final nombreProducto = producto['nombre'] ?? 'Producto sin nombre';
+    final precioPuntos = producto['puntos_costo'] ?? 0;
+    final descripcion = producto['descripcion'] ?? 'Delicioso producto disponible en el bar de tu facultad.';
 
-  // ── TARJETA DE PRODUCTO ──────────────────────────────────
-  Widget _tarjetaProducto() {
-    return Container(
-      decoration: BoxDecoration(
-        color: PaletaColores.fieldBackground, // Blanco o Gris super claro
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Imagen del producto 
-          Container(
-            width: 70, 
-            height: 70,
-            decoration: BoxDecoration(
-              color: PaletaColores.textPrimary.withValues(alpha: 0.1),
-              shape: BoxShape.circle, 
-            ),
-            child: Icon(
-              Icons.fastfood_outlined, 
-              color: PaletaColores.textPrimary,
-              size: 35,
-            ),
-          ),
-          const SizedBox(height: 12),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        
+        // 👇 ESTA ES LA MAGIA: Una variable local solo para este panel
+        int cantidadSeleccionada = 1;
 
-          // Título del producto
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Text(
-              'Snack ESPOCH',
-              style: TextStyle(
-                fontSize: 16, 
-                fontWeight: FontWeight.w600,
-                color: PaletaColores.textPrimary,
+        // 👇 StatefulBuilder actúa como un mini-cerebro para actualizar solo este panel
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setStateModal) {
+            
+            return Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: PaletaColores.background,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis, 
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Fila: Puntos + Botón
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween, 
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: PaletaColores.primary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '25 puntos',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: PaletaColores.primary,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 50, height: 5,
+                      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
                     ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // Imagen
+                  Center(
+                    child: Container(
+                      width: 120, height: 120,
+                      decoration: BoxDecoration(
+                        color: PaletaColores.textPrimary.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.fastfood_outlined, size: 60, color: PaletaColores.primary),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Título y Puntos
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          nombreProducto,
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: PaletaColores.textPrimary),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: PaletaColores.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '$precioPuntos puntos',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: PaletaColores.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Descripción
+                  Text('Descripción', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: PaletaColores.textSecondary)),
+                  const SizedBox(height: 8),
+                  Text(descripcion, style: TextStyle(fontSize: 15, color: PaletaColores.textPrimary, height: 1.5)),
+                  const SizedBox(height: 24),
+
+                  // 👇 NUEVO: SELECTOR DE CANTIDAD
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Cantidad:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.remove, color: Colors.grey),
+                              onPressed: () {
+                                if (cantidadSeleccionada > 1) {
+                                  // Usamos setStateModal en vez de setState
+                                  setStateModal(() => cantidadSeleccionada--);
+                                }
+                              },
+                            ),
+                            Text(
+                              '$cantidadSeleccionada',
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.add, color: PaletaColores.primary),
+                              onPressed: () {
+                                setStateModal(() => cantidadSeleccionada++);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Botón principal
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        // 👇 Pasamos la cantidad seleccionada a la función
+                        _agregarAlCarrito(producto, cantidad: cantidadSeleccionada);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: PaletaColores.primary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                      child: const Text(
+                        'Añadir al Carrito',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+  
+  // ── TARJETA DE PRODUCTO ──────────────────────────────────
+  Widget _tarjetaProducto(Map<String,dynamic>producto){
+    final nombreProducto = producto['nombre'] ?? 'Producto';
+    final precioPuntos = producto['puntos_costo'] ?? 0;
+    final int stock = producto['stock'] ?? 0;
+    final bool agotado = stock <= 0;
+
+    return GestureDetector(
+      onTap: (){
+        if(!agotado){
+          _mostrarDetalleProducto(producto);
+        }else{
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Este producto está agotado'), behavior: SnackBarBehavior.floating),
+          );
+        }
+        debugPrint('👆 Hice clic en la tarjeta de: $nombreProducto');
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color:agotado? Colors.grey.shade200:PaletaColores.fieldBackground, // Blanco o Gris super claro
+          borderRadius: BorderRadius.circular(20),
+          // Si está agotado
+          boxShadow: agotado?[]:[
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Stack(
+          children:[
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Imagen del producto 
+                Container(
+                  width: 70, 
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: agotado ? Colors.grey.shade400 : PaletaColores.textPrimary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle, 
+                  ),
+                  child: Icon(
+                    Icons.fastfood_outlined, 
+                    color: PaletaColores.textPrimary,
+                    size: 35,
                   ),
                 ),
-                GestureDetector(
-                  onTap: () {
-                    debugPrint('Producto agregado al carrito');
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: PaletaColores.primary,
-                      shape: BoxShape.circle,
+                const SizedBox(height: 12),
+                // Título del producto
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Text(
+                    nombreProducto,
+                    style: TextStyle(
+                      fontSize: 16, 
+                      fontWeight: FontWeight.w600,
+                      color: PaletaColores.textPrimary,
                     ),
-                    child: const Icon(
-                      Icons.add_shopping_cart, 
-                      color: Colors.white, 
-                      size: 20,
-                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis, 
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Fila: Puntos + Botón
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween, 
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: agotado ? Colors.grey.shade300 : PaletaColores.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '$precioPuntos puntos',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: agotado ? Colors.grey : PaletaColores.primary,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: agotado ? Colors.grey.shade400 : PaletaColores.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          agotado ? Icons.block : Icons.add_shopping_cart,
+                          color: Colors.white, size: 20,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+            //Etiqueta roja de AGOTADO
+            if (agotado)
+              Positioned(
+                top: 10, right: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(8)),
+                  child: const Text('AGOTADO', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

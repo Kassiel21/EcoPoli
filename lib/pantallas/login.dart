@@ -3,6 +3,8 @@ import 'package:eco_poli/config/paleta_colores.dart';
 import 'package:eco_poli/servicios/autenticacion.dart';
 import 'package:eco_poli/pantallas/registro.dart';
 import 'package:eco_poli/pantallas/bienvenido.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart'; 
+import 'package:eco_poli/config/supabase.dart';
 
 class PantallaLogin extends StatefulWidget {
   const PantallaLogin({super.key});
@@ -55,6 +57,11 @@ class _PantallaLoginState extends State<PantallaLogin> {
       setState(() => _mensajeError = error);   // Hubo error: lo mostramos en pantalla
     
     } else {
+      final authId = SupabaseConfig.client.auth.currentUser?.id;
+      if (authId != null) {
+        OneSignal.login(authId);
+        debugPrint('✅ OneSignal vinculado al usuario: $authId');
+      }
       // Login exitoso: navegamos a Bienvenido
       if (mounted) {
         Navigator.pushReplacement(
