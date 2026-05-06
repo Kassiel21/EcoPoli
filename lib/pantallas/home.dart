@@ -5,6 +5,7 @@ import 'package:eco_poli/config/supabase.dart';
 import 'package:eco_poli/pantallas/carrito.dart';
 import 'package:eco_poli/pantallas/notificaciones.dart';
 import 'package:eco_poli/pantallas/mi_impacto.dart';
+import 'package:eco_poli/pantallas/perfil.dart';
 
 class PantallaHome extends StatefulWidget {
   const PantallaHome({super.key});
@@ -207,9 +208,9 @@ class _PantallaHomeState extends State<PantallaHome> {
     final List<Widget> pantallasDelMenu = [
       _vistaHome(),                                    // Índice 0: Icono Home
       const Center(child: Text('📍 Bares (Próximamente)')),     // Índice 1: Icono Ubicación
-      const PantallaImpacto(),                                  // Índice 2: Icono Calendario (¡NUEVA!)
+      const PantallaImpacto(),                                  // Índice 2: Icono Calendario
       const Center(child: Text('🏆 Retos (Próximamente)')),      // Índice 3: Icono Trofeo
-      const Center(child: Text('👤 Perfil (Próximamente)')),    // Índice 4: Icono Persona
+      const PantallaPerfil(),                                    // Índice 4: Perfil
     ];
 
     return Scaffold(
