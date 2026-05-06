@@ -4,6 +4,7 @@ import 'config/paleta_colores.dart';
 import 'pantallas/login.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,6 +61,9 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'EcoPoli',
       debugShowCheckedModeBanner: false, // Quita el banner rojo de "debug"
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [Locale('es', 'EC')],
+      locale: const Locale('es', 'EC'),
       
       // tema de la app
       theme: ThemeData(

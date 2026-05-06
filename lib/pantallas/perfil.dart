@@ -47,10 +47,10 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     }
   }
 
-  /// Recarga el perfil al volver de una sub-pantalla de edición
+  /// Navega a una sub-pantalla y recarga el perfil al volver
   Future<void> _recargarAlVolver(Widget pantalla) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => pantalla));
-    _cargarDatos(); // Actualiza los datos al regresar
+    _cargarDatos();
   }
 
   Future<void> _cerrarSesion() async {
@@ -90,15 +90,10 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
         : SingleChildScrollView(
             child: Column(
               children: [
-                // ── HEADER CON AVATAR ────────────────────────
                 _encabezado(),
                 const SizedBox(height: 16),
-
-                // ── SECCIÓN: RESUMEN ─────────────────────────
                 _seccionResumen(),
                 const SizedBox(height: 16),
-
-                // ── SECCIÓN: OPCIONES ────────────────────────
                 _seccionOpciones(),
                 const SizedBox(height: 32),
               ],
@@ -131,7 +126,6 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
           child: Column(
             children: [
-              // Avatar con foto de perfil real
               AvatarPerfilWidget(
                 urlFoto: _usuario?.fotoPerfil,
                 radio: 48,
@@ -168,7 +162,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Tu Resumen',
+            'Estadísticas',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -178,45 +172,17 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _tarjetaStat(
-                  Icons.emoji_events,
-                  'Tus Puntos',
-                  '$puntos',
-                  Colors.amber,
-                ),
-              ),
+              Expanded(child: _tarjetaStat(Icons.emoji_events, 'Tus Puntos', '$puntos', Colors.amber)),
               const SizedBox(width: 12),
-              Expanded(
-                child: _tarjetaStat(
-                  Icons.swap_horiz,
-                  'Canjeados',
-                  '0',
-                  PaletaColores.primary,
-                ),
-              ),
+              Expanded(child: _tarjetaStat(Icons.swap_horiz, 'Canjeados', '0', PaletaColores.primary)),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(
-                child: _tarjetaStat(
-                  Icons.recycling,
-                  'Botellas\nRecicladas',
-                  '0',
-                  Colors.teal,
-                ),
-              ),
+              Expanded(child: _tarjetaStat(Icons.recycling, 'Botellas\nRecicladas', '0', Colors.teal)),
               const SizedBox(width: 12),
-              Expanded(
-                child: _tarjetaStat(
-                  Icons.leaderboard,
-                  'Tu Posición',
-                  '#--',
-                  Colors.deepPurple,
-                ),
-              ),
+              Expanded(child: _tarjetaStat(Icons.leaderboard, 'Tu Posición', '#--', Colors.deepPurple)),
             ],
           ),
         ],
@@ -247,18 +213,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  etiqueta,
-                  style: TextStyle(fontSize: 12, color: PaletaColores.textSecondary),
-                ),
-                Text(
-                  valor,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                ),
+                Text(etiqueta, style: TextStyle(fontSize: 12, color: PaletaColores.textSecondary)),
+                Text(valor, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
               ],
             ),
           ),
@@ -393,5 +349,4 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       onTap: onTap,
     );
   }
-
 }
