@@ -1,3 +1,5 @@
+import 'package:eco_poli/pantallas/perfil.dart';
+import 'package:eco_poli/pantallas/retos_ranking.dart';
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
 import 'package:eco_poli/servicios/autenticacion.dart';
@@ -208,8 +210,8 @@ class _PantallaHomeState extends State<PantallaHome> {
       _vistaHome(),                                    // Índice 0: Icono Home
       const Center(child: Text('📍 Bares (Próximamente)')),     // Índice 1: Icono Ubicación
       const PantallaImpacto(),                                  // Índice 2: Icono Calendario (¡NUEVA!)
-      const Center(child: Text('🏆 Retos (Próximamente)')),      // Índice 3: Icono Trofeo
-      const Center(child: Text('👤 Perfil (Próximamente)')),    // Índice 4: Icono Persona
+      const PantallaRetos(),      // Índice 3: Icono Trofeo
+      const PantallaPerfil()    // Índice 4: Icono Persona
     ];
 
     return Scaffold(
@@ -407,142 +409,179 @@ class _PantallaHomeState extends State<PantallaHome> {
     final precioPuntos = producto['puntos_costo'] ?? 0;
     final descripcion = producto['descripcion'] ?? 'Delicioso producto disponible en el bar de tu facultad.';
 
+    // 1. Declaramos el controlador y la cantidad ANTES del modal
+    int cantidadSeleccionada = 1;
+    final controladorCantidad = TextEditingController(text: '1');
+
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
+      isScrollControlled: true, // Permite que el modal suba con el teclado
       backgroundColor: Colors.transparent,
       builder: (context) {
-        
-        // 👇 ESTA ES LA MAGIA: Una variable local solo para este panel
-        int cantidadSeleccionada = 1;
-
-        // 👇 StatefulBuilder actúa como un mini-cerebro para actualizar solo este panel
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setStateModal) {
             
-            return Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: PaletaColores.background,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 50, height: 5,
-                      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-
-                  // Imagen
-                  Center(
-                    child: Container(
-                      width: 120, height: 120,
-                      decoration: BoxDecoration(
-                        color: PaletaColores.textPrimary.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
+            return Padding(
+              // 👇 ESTO ES MAGIA: Empuja el modal hacia arriba cuando sale el teclado
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: PaletaColores.background,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, // Se ajusta al contenido
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 50, height: 5,
+                        decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10)),
                       ),
-                      child: Icon(Icons.fastfood_outlined, size: 60, color: PaletaColores.primary),
                     ),
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 30),
 
-                  // Título y Puntos
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          nombreProducto,
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: PaletaColores.textPrimary),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    // Imagen
+                    Center(
+                      child: Container(
+                        width: 120, height: 120,
                         decoration: BoxDecoration(
-                          color: PaletaColores.primary.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
+                          color: PaletaColores.textPrimary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
                         ),
-                        child: Text(
-                          '$precioPuntos puntos',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: PaletaColores.primary),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Descripción
-                  Text('Descripción', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: PaletaColores.textSecondary)),
-                  const SizedBox(height: 8),
-                  Text(descripcion, style: TextStyle(fontSize: 15, color: PaletaColores.textPrimary, height: 1.5)),
-                  const SizedBox(height: 24),
-
-                  // 👇 NUEVO: SELECTOR DE CANTIDAD
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Cantidad:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.remove, color: Colors.grey),
-                              onPressed: () {
-                                if (cantidadSeleccionada > 1) {
-                                  // Usamos setStateModal en vez de setState
-                                  setStateModal(() => cantidadSeleccionada--);
-                                }
-                              },
-                            ),
-                            Text(
-                              '$cantidadSeleccionada',
-                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.add, color: PaletaColores.primary),
-                              onPressed: () {
-                                setStateModal(() => cantidadSeleccionada++);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Botón principal
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        // 👇 Pasamos la cantidad seleccionada a la función
-                        _agregarAlCarrito(producto, cantidad: cantidadSeleccionada);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: PaletaColores.primary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      child: const Text(
-                        'Añadir al Carrito',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                        child: Icon(Icons.fastfood_outlined, size: 60, color: PaletaColores.primary),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
+                    const SizedBox(height: 24),
+
+                    // Título y Puntos
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            nombreProducto,
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: PaletaColores.textPrimary),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: PaletaColores.primary.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '$precioPuntos puntos',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: PaletaColores.primary),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Descripción
+                    Text('Descripción', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: PaletaColores.textSecondary)),
+                    const SizedBox(height: 8),
+                    Text(descripcion, style: TextStyle(fontSize: 15, color: PaletaColores.textPrimary, height: 1.5)),
+                    const SizedBox(height: 24),
+
+                    //  SELECTOR DE CANTIDAD (Con texto manual)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Cantidad:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              // Botón Menos
+                              IconButton(
+                                icon: const Icon(Icons.remove, color: Colors.grey),
+                                onPressed: () {
+                                  if (cantidadSeleccionada > 1) {
+                                    setStateModal(() {
+                                      cantidadSeleccionada--;
+                                      controladorCantidad.text = cantidadSeleccionada.toString();
+                                    });
+                                  }
+                                },
+                              ),
+                              
+                              // CAJA DE TEXTO MANUAL
+                              SizedBox(
+                                width: 50,
+                                child: TextField(
+                                  controller: controladorCantidad,
+                                  keyboardType: TextInputType.number,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none, // Sin borde porque ya lo tiene el contenedor
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                  onChanged: (valorEscrito) {
+                                    if (valorEscrito.isEmpty) return;
+                                    int? nuevaCantidad = int.tryParse(valorEscrito);
+                                    if (nuevaCantidad != null && nuevaCantidad > 0) {
+                                      setStateModal(() {
+                                        cantidadSeleccionada = nuevaCantidad;
+                                      });
+                                    } else {
+                                      setStateModal(() {
+                                        cantidadSeleccionada = 1;
+                                        controladorCantidad.text = '1';
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+
+                              // Botón Más
+                              IconButton(
+                                icon: Icon(Icons.add, color: PaletaColores.primary),
+                                onPressed: () {
+                                  setStateModal(() {
+                                    cantidadSeleccionada++;
+                                    controladorCantidad.text = cantidadSeleccionada.toString();
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Botón principal
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          // Me imagino que aquí usas tu función _agregarAlCarrito original
+                           _agregarAlCarrito(producto, cantidad: cantidadSeleccionada);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: PaletaColores.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        ),
+                        child: const Text(
+                          'Añadir al Carrito',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                ),
               ),
             );
           },

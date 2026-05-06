@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
-//import 'package:intl/intl.dart'; // para las fechas
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart'; // para las fechas
 
 class PantallaImpacto extends StatefulWidget {
   const PantallaImpacto({super.key});
@@ -11,35 +12,137 @@ class PantallaImpacto extends StatefulWidget {
 
 class _PantallaImpactoState extends State<PantallaImpacto> {
   DateTime _fechaSeleccionada = DateTime.now();
+  final SupabaseClient _supabase = Supabase.instance.client;
+  bool _cargandoDatosIniciales = true;
+  bool _cargandoActividades = false;
+  int puntosActuales = 0;
+  int botellasTotales = 0;
+  List<Map<String, dynamic>> _actividades = [];
 
-  // ──  DISEÑO ─────────────────────────────────
-  final int puntosActuales = 850;
-  final int botellasTotales = 142;
+  @override
+  void initState() {
+    super.initState();
+    // Apenas se abre la pantalla, cargamos los datos
+    _cargarDatosCompletos();
+  }
 
-  //  actividades del día seleccionado
-  final List<Map<String, dynamic>> _actividades = [
-    {
-      'hora': '14:30',
-      'titulo': 'Jugo del Valle Canjeado',
-      'descripcion': 'Bar de la Facultad de Informática (FIE)',
-      'puntos': -50,
-      'tipo': 'canje',
-    },
-    {
-      'hora': '10:15',
-      'titulo': 'Reciclaje Aprobado',
-      'descripcion': 'Entregaste 5 botellas PET',
-      'puntos': 25,
-      'tipo': 'reciclaje',
-    },
-    {
-      'hora': '08:00',
-      'titulo': 'Bono Diario',
-      'descripcion': '¡Ingresaste a la app hoy!',
-      'puntos': 5,
-      'tipo': 'bono',
-    },
-  ];
+  Future<void> _cargarDatosCompletos () async {
+    if (!mounted) return;
+    setState(() {
+      _cargandoDatosIniciales = true;
+      _cargandoActividades = true;
+    });
+
+    try {
+      final authId = _supabase.auth.currentUser!.id;    // Obtenemos el ID de usuario de la sesión activa 
+      final datosUsuario = await _supabase      //OBTENER PUNTOS ACTUALES 
+          .from('usuarios')
+          .select('cant_puntos')
+          .eq('auth_id', authId) // Buscamos por el auth_id vinculado
+          .single();
+      
+      //BOTELLAS TOTALES 
+      final userIdUuid = await _obtenerUuidUsuario(authId); // Necesitamos el id_usuario UUID
+      
+      if (userIdUuid != null) {
+        final listaEntregasValidadas = await _supabase
+            .from('entregas')
+            .select('cantidad_botellas')
+            .eq('id_usuario', userIdUuid)
+            .eq('estado', 'validada'); 
+
+        // Sumamos las botellas en memoria (Flutter)
+        int sumaBotellas = 0;
+        for (var entrega in listaEntregasValidadas) {
+          sumaBotellas += (entrega['cantidad_botellas'] as int);
+        }
+
+        puntosActuales = datosUsuario['cant_puntos'] ?? 0;
+        botellasTotales = sumaBotellas;
+
+        // CARGAR ACTIVIDADES DEL DÍA 
+        await _cargarActividadesDelDia(userIdUuid);
+      }
+
+    } catch (e) {
+      debugPrint('❌ Error crítico cargando impacto: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error de conexión con EcoPoli.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cargandoDatosIniciales = false;
+          _cargandoActividades = false;
+        });
+      }
+    }
+  }
+
+  // cargar actividades cuando cambia la fecha
+  Future<void> _cargarActividadesDelDia(String userIdUuid) async {
+    // rango del día (00:00:00 a 23:59:59) en UTC para Supabase
+    final inicioDiaUtc = DateTime(_fechaSeleccionada.year, _fechaSeleccionada.month, _fechaSeleccionada.day).toUtc().toIso8601String();
+    final finDiaUtc = DateTime(_fechaSeleccionada.year, _fechaSeleccionada.month, _fechaSeleccionada.day, 23, 59, 59).toUtc().toIso8601String();
+
+    try {
+      final respuestaHistorial = await _supabase            //  tabla 'historial_puntos' 
+          .from('historial_puntos')
+          .select()
+          .eq('id_usuario', userIdUuid)
+          .gte('fecha_creacion', inicioDiaUtc) // Mayor o igual que inicio
+          .lte('fecha_creacion', finDiaUtc)   // Menor o igual que fin
+          .order('fecha_creacion', ascending: false); // Más recientes primero
+
+      List<Map<String, dynamic>> actividadesFormateadas = [];
+      for (var registro in respuestaHistorial) {
+        final fechaLocal = DateTime.parse(registro['fecha_creacion']).toLocal();
+        actividadesFormateadas.add({
+          'hora': DateFormat('HH:mm').format(fechaLocal),
+          'titulo': registro['puntos'] > 0 ? 'Puntos Ganados ⬆️' : 'Puntos Canjeados ⬇️',
+          'descripcion': registro['descripcion'] ?? 'Actividad del día',
+          'puntos': registro['puntos'], //  valor real (ej: +50 o -100)
+        });
+      }
+
+      setState(() {
+        _actividades = actividadesFormateadas;
+      });
+
+    } catch (e) {
+      debugPrint('❌ Error cargando historial: $e');
+    }
+  }
+
+  Future<String?> _obtenerUuidUsuario(String authId) async {
+    try {
+      final res = await _supabase.from('usuarios').select('id_usuario').eq('auth_id', authId).single();
+      return res['id_usuario'];
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Función para manejar el cambio de fecha 
+  void _actualizarFechaYRecargar(DateTime nuevaFecha) async {
+    if (!mounted) return;
+    setState(() {
+      _fechaSeleccionada = nuevaFecha;
+      _cargandoActividades = true; // Solo mostramos carga en la línea de tiempo
+    });
+
+    final authId = _supabase.auth.currentUser!.id;
+    final userIdUuid = await _obtenerUuidUsuario(authId);
+    if (userIdUuid != null) {
+      await _cargarActividadesDelDia(userIdUuid);
+    }
+
+    if (mounted) {
+      setState(() => _cargandoActividades = false);
+    }
+  }
 
   // ── FUNCIÓN PARA ABRIR EL CALENDARIO COMPLETO ───────────────
   Future<void> _abrirCalendario() async {
@@ -48,6 +151,10 @@ class _PantallaImpactoState extends State<PantallaImpacto> {
       initialDate: _fechaSeleccionada,
       firstDate: DateTime(2026), // El año en que empezó EcoPoli
       lastDate: DateTime.now(),  // No pueden ver el futuro
+      //initialEntryMode: DatePickerEntryMode.calendarOnly,
+      initialEntryMode: DatePickerEntryMode.calendar,         // calendario normal, pero deja activo el botón para escribir a mano
+      locale: const Locale('es', 'EC'),
+
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -56,6 +163,8 @@ class _PantallaImpactoState extends State<PantallaImpacto> {
               onPrimary: Colors.white,
               onSurface: PaletaColores.textPrimary,
             ),
+            dividerTheme: const DividerThemeData(color: Colors.transparent),
+            dividerColor: Colors.transparent,
           ),
           child: child!,
         );
@@ -63,11 +172,70 @@ class _PantallaImpactoState extends State<PantallaImpacto> {
     );
 
     if (fechaElegida != null) {
-      setState(() {
-        _fechaSeleccionada = fechaElegida;
-      });
-      // Aquí, en el futuro, llamarás a Supabase para bajar las actividades de este día exacto.
+      _actualizarFechaYRecargar(fechaElegida);
     }
+  }
+
+  Widget _construirSelectorDias() {
+    List<DateTime> dias = List.generate(7, (index) => DateTime.now().subtract(Duration(days: 6 - index)));
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: dias.map((dia) {
+          bool esSeleccionado = dia.day == _fechaSeleccionada.day && dia.month == _fechaSeleccionada.month && 
+          dia.year == _fechaSeleccionada.year;
+
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (!esSeleccionado) {
+                  _actualizarFechaYRecargar(dia);
+                }
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                margin: const EdgeInsets.symmetric(horizontal: 4), // Margen más pequeño
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: esSeleccionado ? PaletaColores.primary : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    if (esSeleccionado)
+                      BoxShadow(color: PaletaColores.primary.withValues(alpha: 0.4), blurRadius: 8, offset: const Offset(0, 4))
+                    else
+                      BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _obtenerNombreDia(dia.weekday),
+                      style: TextStyle(
+                        color: esSeleccionado ? Colors.white70 : Colors.grey.shade600,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${dia.day}',
+                      style: TextStyle(
+                        color: esSeleccionado ? Colors.white : PaletaColores.textPrimary,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(), // Convertimos el map a una lista de widgets
+      ),
+    );
   }
 
   // ── UI ────────────────────────────────────────────────────────────
@@ -89,15 +257,17 @@ class _PantallaImpactoState extends State<PantallaImpacto> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        children: [
-          _construirHeroSection(),
-          const SizedBox(height: 15),
-          _construirSelectorDias(),
-          const SizedBox(height: 5),
-          _construirLineaTiempo(),
-        ],
-      ),
+      body: _cargandoDatosIniciales 
+          ? const Center(child: CircularProgressIndicator()) 
+          : Column(
+              children: [
+                _construirHeroSection(),
+                const SizedBox(height: 24),
+                _construirSelectorDias(),
+                const SizedBox(height: 20),
+                _construirLineaTiempo(),
+              ],
+            ),
     );
   }
 
@@ -135,70 +305,13 @@ class _PantallaImpactoState extends State<PantallaImpacto> {
           child: Icon(icono, color: Colors.white, size: 30),
         ),
         const SizedBox(height: 12),
-        Text(valor, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.0)),
+        FittedBox( // que números muy largos rompan el diseño
+          fit: BoxFit.scaleDown,
+          child: Text(valor, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 1.0))
+        ),
         const SizedBox(height: 4),
-        Text(titulo, style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+        Text(titulo, style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
       ],
-    );
-  }
-
-  //  CINTA SEMANAL (Selector de días)
-  Widget _construirSelectorDias() {
-    // Generamos los últimos 7 días
-    List<DateTime> dias = List.generate(7, (index) => DateTime.now().subtract(Duration(days: 6 - index)));
-
-    return SizedBox(
-      height: 85,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: dias.length,
-        itemBuilder: (context, index) {
-          DateTime dia = dias[index];
-          bool esSeleccionado = dia.day == _fechaSeleccionada.day && 
-          dia.month == _fechaSeleccionada.month && dia.year == _fechaSeleccionada.year;
-
-          return GestureDetector(
-            onTap: () => setState(() => _fechaSeleccionada = dia),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              width: 65,
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: esSeleccionado ? PaletaColores.primary : Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  if (esSeleccionado)
-                    BoxShadow(color: PaletaColores.primary.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))
-                  else 
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 5, offset: const Offset(0, 2))
-                ],
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _obtenerNombreDia(dia.weekday),
-                    style: TextStyle(
-                      color: esSeleccionado ? Colors.white70 : Colors.grey.shade600,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${dia.day}',
-                    style: TextStyle(
-                      color: esSeleccionado ? Colors.white : PaletaColores.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 22,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 
@@ -210,120 +323,125 @@ class _PantallaImpactoState extends State<PantallaImpacto> {
   //  LÍNEA DE TIEMPO (Timeline nativo)
   Widget _construirLineaTiempo() {
     return Expanded(
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        itemCount: _actividades.length,
-        itemBuilder: (context, index) {
-          final actividad = _actividades[index];
-          final bool esUltimo = index == _actividades.length - 1;
-          
-          final bool esIngreso = actividad['puntos'] > 0;
-          final Color colorIcono = esIngreso ? Colors.green : PaletaColores.error;
-          final IconData iconoPrincipal = esIngreso ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded;
+      child: _cargandoActividades
+          ? const Center(child: CircularProgressIndicator()) // Carga de actividades
+          : _actividades.isEmpty
+              ? _construirEstadoVacio() // 👇 Estado Vacío que faltaba
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  itemCount: _actividades.length,
+                  itemBuilder: (context, index) {
+                    final actividad = _actividades[index];
+                    final bool esUltimo = index == _actividades.length - 1;
+                    
+                    final bool esIngreso = actividad['puntos'] > 0;
+                    // Usando rojo de error para egresos, verde para ingresos
+                    final Color colorIcono = esIngreso ? Colors.green : Colors.redAccent; 
+                    final IconData iconoPrincipal = esIngreso ? Icons.add_circle_outline : Icons.remove_circle_outline;
 
-          return IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Columna izquierda (Punto y Línea)
-                SizedBox(
-                  width: 30,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 18,
-                        height: 18,
-                        margin: const EdgeInsets.only(top: 14), // Alinea el punto con el texto
-                        decoration: BoxDecoration(
-                          color: colorIcono,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: PaletaColores.background, width: 3),
-                          boxShadow: [
-                            BoxShadow(color: colorIcono.withValues(alpha: 0.4), blurRadius: 4)
-                          ]
-                        ),
-                      ),
-                      if (!esUltimo)
-                        Expanded(
-                          child: Container(
-                            width: 3,
-                            color: Colors.grey.shade300,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                
-                // Columna derecha (Tarjeta de contenido)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 24.0),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 12, offset: const Offset(0, 4))
-                        ],
-                      ),
+                    return IntrinsicHeight(
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: colorIcono.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
-                            child: Icon(iconoPrincipal, color: colorIcono),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
+                          // Columna izquierda (Línea de tiempo visual)
+                          SizedBox(
+                            width: 30,
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        actividad['titulo'],
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    Text(
-                                      actividad['hora'],
-                                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
+                                Container(
+                                  width: 16, height: 16,
+                                  margin: const EdgeInsets.only(top: 14), 
+                                  decoration: BoxDecoration(
+                                    color: colorIcono, shape: BoxShape.circle,
+                                    border: Border.all(color: PaletaColores.background, width: 3),
+                                    boxShadow: [BoxShadow(color: colorIcono.withValues(alpha: 0.3), blurRadius: 4)]
+                                  ),
                                 ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  actividad['descripcion'],
-                                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                                  maxLines: 2, overflow: TextOverflow.ellipsis,
-                                ),
+                                if (!esUltimo)
+                                  Expanded(child: Container(width: 3, color: Colors.grey.shade300)),
                               ],
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${actividad['puntos'] > 0 ? '+' : ''}${actividad['puntos']}',
-                            style: TextStyle(
-                              color: colorIcono,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 20,
+                          const SizedBox(width: 12),
+                          
+                          // Tarjeta de contenido
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 20.0),
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white, borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 10, offset: const Offset(0, 4))],
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(color: colorIcono.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)),
+                                      child: Icon(iconoPrincipal, color: colorIcono, size: 24),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  actividad['titulo'],
+                                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: PaletaColores.textPrimary),
+                                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              Text(
+                                                actividad['hora'],
+                                                style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.bold),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            actividad['descripcion'],
+                                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.3),
+                                            maxLines: 2, overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      '${actividad['puntos'] > 0 ? '+' : ''}${actividad['puntos']}',
+                                      style: TextStyle(color: colorIcono, fontWeight: FontWeight.w900, fontSize: 18),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
-              ],
-            ),
-          );
-        },
-      ),
+    );
+  }
+
+  // para cuando no hay nada que mostrar
+  Widget _construirEstadoVacio() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.nature_people_outlined, size: 100, color: Colors.grey.shade300),
+        const SizedBox(height: 20),
+        Text(
+          'No hay actividad registrada.',
+          style: TextStyle(color: PaletaColores.textSecondary, fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+      ],
     );
   }
 }

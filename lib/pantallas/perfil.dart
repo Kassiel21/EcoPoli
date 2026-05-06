@@ -1,3 +1,4 @@
+import 'package:eco_poli/pantallas/historial_canjes.dart';
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
 import 'package:eco_poli/servicios/autenticacion.dart';
@@ -20,7 +21,6 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
   final _servicioAuth = Autenticacion();
   String _nombre = '';
   String _correo = '';
-  int _paginaActual = 4; // Perfil es el ítem 5 (índice 4)
 
   @override
   void initState() {
@@ -87,7 +87,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           ],
         ),
       ),
-      bottomNavigationBar: _barraNavegacion(),
+      //bottomNavigationBar: _barraNavegacion(),
     );
   }
 
@@ -118,12 +118,12 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
                 backgroundColor: Colors.white.withValues(alpha: 0.3),
                 child: const Icon(Icons.person, size: 52, color: Colors.white),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               // Nombre
               Text(
                 _nombre.isEmpty ? 'Usuario' : _nombre,
                 style: const TextStyle(
-                  fontSize: 22,
+                  fontSize: 25,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
@@ -132,7 +132,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
               // Correo
               Text(
                 _correo,
-                style: const TextStyle(fontSize: 14, color: Colors.white70),
+                style: const TextStyle(fontSize: 17, color: Colors.white70),
               ),
             ],
           ),
@@ -149,9 +149,9 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Tu Resumen',
+            'Estadísticas',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
               color: PaletaColores.textPrimary,
             ),
@@ -159,17 +159,17 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _tarjetaStat(Icons.emoji_events, 'Tus Puntos', '200', Colors.amber)),
+              Expanded(child: _tarjetaStat(Icons.emoji_events, 'Puntos', '200', Colors.amber)),
               const SizedBox(width: 12),
-              Expanded(child: _tarjetaStat(Icons.swap_horiz, 'Canjeados', '4', PaletaColores.primary)),
+              Expanded(child: _tarjetaStat(Icons.swap_horiz, 'Canjes', '4', PaletaColores.primary)),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: _tarjetaStat(Icons.recycling, 'Botellas\nRecicladas', '4', Colors.teal)),
+              Expanded(child: _tarjetaStat(Icons.recycling, 'Total reciclado', '4', Colors.teal)),
               const SizedBox(width: 12),
-              Expanded(child: _tarjetaStat(Icons.leaderboard, 'Tu Posición', '#34', Colors.deepPurple)),
+              Expanded(child: _tarjetaStat(Icons.leaderboard, 'Posición', '#34', Colors.deepPurple)),
             ],
           ),
         ],
@@ -182,8 +182,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.8)),
       ),
       child: Row(
         children: [
@@ -197,7 +197,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(etiqueta, style: TextStyle(fontSize: 12, color: PaletaColores.textSecondary)),
+                Text(etiqueta, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: PaletaColores.textSecondary)),
                 Text(valor, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
               ],
             ),
@@ -216,6 +216,8 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
         children: [
           // Información Personal
           _encabezadoSeccion('Información Personal'),
+          _itemOpcion(Icons.person_outline, 'Mis canjes',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaHistorial()))),
           _itemOpcion(Icons.person_outline, 'Cambiar nombre de usuario',
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaCambiarNombre()))),
           _itemOpcion(Icons.photo_camera_outlined, 'Cambiar foto de perfil',
@@ -251,7 +253,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
       child: Text(
         titulo,
         style: TextStyle(
-          fontSize: 15,
+          fontSize: 16.5,
           fontWeight: FontWeight.w600,
           color: PaletaColores.textPrimary,
         ),
@@ -292,26 +294,4 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     );
   }
 
-  // ── BARRA DE NAVEGACIÓN ────────────────────────────────
-  Widget _barraNavegacion() {
-    return BottomNavigationBar(
-      currentIndex: _paginaActual,
-      onTap: (index) => setState(() => _paginaActual = index),
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: PaletaColores.primary,
-      unselectedItemColor: PaletaColores.textSecondary,
-      showSelectedLabels: true,
-      showUnselectedLabels: true,
-      iconSize: 28,
-      selectedFontSize: 13,
-      unselectedFontSize: 12,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Inicio'),
-        BottomNavigationBarItem(icon: Icon(Icons.location_on_outlined), activeIcon: Icon(Icons.location_on), label: 'Mapa'),
-        BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), activeIcon: Icon(Icons.calendar_today), label: 'Retos'),
-        BottomNavigationBarItem(icon: Icon(Icons.emoji_events_outlined), activeIcon: Icon(Icons.emoji_events), label: 'Canjes'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'Perfil'),
-      ],
-    );
-  }
 }

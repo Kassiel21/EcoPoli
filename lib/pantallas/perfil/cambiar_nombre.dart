@@ -95,7 +95,7 @@ class _PantallaCambiarNombreState extends State<PantallaCambiarNombre> {
                 ),
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return 'Ingresa un nombre';
-                  if (v.trim().length < 2) return 'Mínimo 2 caracteres';
+                  if (v.trim().length < 2) return 'Mínimo 4 caracteres';
                   return null;
                 },
               ),
