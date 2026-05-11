@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
 import 'package:eco_poli/servicios/autenticacion.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PantallaCambiarNombre extends StatefulWidget {
   const PantallaCambiarNombre({super.key});
@@ -127,14 +128,48 @@ class _PantallaCambiarNombreState extends State<PantallaCambiarNombre> {
 
   Future<void> _guardar() async {
     if (!_formKey.currentState!.validate()) return;
+    
     setState(() => _cargando = true);
-    await Future.delayed(const Duration(seconds: 1)); // TODO: llamada a Supabase
-    setState(() => _cargando = false);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text('Nombre actualizado correctamente'), backgroundColor: PaletaColores.primary),
-      );
-      Navigator.pop(context);
+    
+    try {
+      final supabase = Supabase.instance.client;
+      final usuarioActual = supabase.auth.currentUser;
+
+      if (usuarioActual == null) {
+        throw Exception('No se encontró sesión de usuario');
+      }
+
+      final nuevoNombre = _nombreController.text.trim();
+
+      // Actualizamos el nombre en la tabla 'usuarios'
+      await supabase
+          .from('usuarios')
+          .update({'nombre': nuevoNombre})
+          .eq('auth_id', usuarioActual.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Nombre actualizado correctamente'), 
+            backgroundColor: PaletaColores.primary
+          ),
+        );
+        Navigator.pop(context, true); // Retornamos 'true' para avisar que sí hubo un cambio
+      }
+    } catch (e) {
+      debugPrint('Error al cambiar nombre: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('No se pudo actualizar el nombre. Intenta de nuevo.'), 
+            backgroundColor: PaletaColores.error
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _cargando = false);
+      }
     }
   }
 }
