@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class PantallaTicket extends StatelessWidget {
   final String codigoVerificacion;
@@ -63,11 +64,14 @@ class PantallaTicket extends StatelessWidget {
                       ),
                       const SizedBox(height: 16),
                       
-                      // Código de barras falso 
-                      Icon(Icons.qr_code_2, size: 120, color: PaletaColores.textPrimary),
-                      const SizedBox(height: 24),
-                      Divider(thickness: 2, color: Colors.grey.shade300),
-                      const SizedBox(height: 16),
+                      // Código QR
+                      QrImageView(
+                        data: codigoVerificacion, // El dato que se convierte en QR
+                        version: QrVersions.auto,
+                        size: 150.0,
+                        backgroundColor: Colors.white,
+                        errorCorrectionLevel: QrErrorCorrectLevel.Q, // Nivel de corrección alto
+                      ),
 
                       // Lista de cosas que debe entregarle el del bar
                       const Align(
@@ -87,7 +91,7 @@ class PantallaTicket extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text('${item['cantidad']}x ${item['nombre']}'),
-                                  Text('${(item['puntos_costo'] ?? 0) * (item['cantidad'] ?? 1)} pts', 
+                                  Text('${(item['puntos_costo'] ?? 0) * (item['cantidad'] ?? 1)} puntos', 
                                     style: const TextStyle(fontWeight: FontWeight.bold)),
                                 ],
                               ),

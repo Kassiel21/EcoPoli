@@ -230,109 +230,90 @@ class _PantallaHistorialState extends State<PantallaHistorial> {
         elevation: 0,
         foregroundColor: PaletaColores.textPrimary,
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _obtenerMisCanjes(),
-        builder: (context, snapshot) {
-          // 1. Mientras está cargando
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          
-          // 2. Si hubo un error
-          if (snapshot.hasError) {
-            return Center(child: Text('Error al cargar historial: ${snapshot.error}'));
-          }
-
-          final canjes = snapshot.data ?? [];
-
-          // 3. Si no ha comprado nada nunca
-          if (canjes.isEmpty) {
-            return const Center(
-              child: Text('Aún no has generado ningún código.', style: TextStyle(fontSize: 16, color: Colors.grey)),
-            );
-          }
-
-          // 4. Mostrar la lista de tickets
-          return ListView.builder(
-            padding: const EdgeInsets.all(24),
-            itemCount: canjes.length,
-            itemBuilder: (context, index) {
-              final canje = canjes[index];
-              final estado = canje['estado'] ?? 'pendiente';
-              
-              // Colores según el estado
-              final esPendiente = estado == 'pendiente';
-              final colorEstado = esPendiente ? Colors.orange : PaletaColores.primary;
-              final iconoEstado = esPendiente ? Icons.access_time_filled : Icons.check_circle;
-
-              return GestureDetector(
-                onTap: () {
-                  // Cuando toquen la tarjeta, se abre el ticket
-                  _mostrarTicketDetalle(context, canje);
-                },
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _formatearFecha(canje['fecha_canje']),
-                            style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: colorEstado.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(iconoEstado, size: 14, color: colorEstado),
-                                const SizedBox(width: 4),
-                                Text(
-                                  estado.toUpperCase(),
-                                  style: TextStyle(color: colorEstado, fontSize: 12, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      const Text('Nº DE TICKET', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          // ID real de la base de datos
-                          Text(
-                            '#${canje['id_canje'].toString().substring(0, 8).toUpperCase()}',
-                            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: PaletaColores.textPrimary, letterSpacing: 1.5),
-                          ),
-                          Text(
-                            '-${canje['puntos_usados']} puntos',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: PaletaColores.error),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
+      // 👇 REFRESH INDICATOR ENVUELVE AL FUTURE BUILDER
+      body: RefreshIndicator(
+        onRefresh: () async {
+          // Engañamos al estado para que vuelva a correr el FutureBuilder
+          setState(() {}); 
         },
+        color: PaletaColores.primary,
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _obtenerMisCanjes(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Container(height: 300, alignment: Alignment.center, child: Text('Error: ${snapshot.error}')),
+              );
+            }
+
+            final canjes = snapshot.data ?? [];
+
+            if (canjes.isEmpty) {
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Container(height: 300, alignment: Alignment.center, child: const Text('Aún no has realizado ningún canje.', style: TextStyle(color: Colors.grey))),
+              );
+            }
+
+            return ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(), // 👇 Obligatorio para recargar
+              padding: const EdgeInsets.all(24),
+              itemCount: canjes.length,
+              itemBuilder: (context, index) {
+                final canje = canjes[index];
+                final estado = canje['estado'] ?? 'pendiente';
+                final esPendiente = estado == 'pendiente';
+                final colorEstado = esPendiente ? Colors.orange : PaletaColores.primary;
+                final iconoEstado = esPendiente ? Icons.access_time_filled : Icons.check_circle;
+
+                return GestureDetector(
+                  onTap: () => _mostrarTicketDetalle(context, canje),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(_formatearFecha(canje['fecha_canje']), style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(color: colorEstado.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                              child: Row(
+                                children: [
+                                  Icon(iconoEstado, size: 14, color: colorEstado),
+                                  const SizedBox(width: 4),
+                                  Text(estado.toUpperCase(), style: TextStyle(color: colorEstado, fontSize: 12, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('Nº DE TICKET', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('#${canje['id_canje'].toString().substring(0, 8).toUpperCase()}', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: PaletaColores.textPrimary, letterSpacing: 1.5)),
+                            Text('-${canje['puntos_usados']} puntos', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: PaletaColores.error)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PantallaCambioRol extends StatefulWidget {
   const PantallaCambioRol({super.key});
@@ -128,22 +129,46 @@ class _PantallaCambioRolState extends State<PantallaCambioRol> {
   }
 
   Future<void> _confirmarCambio() async {
-    if (_correoController.text.isEmpty || _rolSeleccionado == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completa todos los campos')),
-      );
+    final correo = _correoController.text.trim();
+    if (correo.isEmpty || _rolSeleccionado == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Completa todos los campos')));
       return;
     }
+    
     setState(() => _cargando = true);
-    await Future.delayed(const Duration(seconds: 1)); // Simula llamada a API
-    setState(() => _cargando = false);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Rol cambiado a "$_rolSeleccionado" correctamente'),
-          backgroundColor: PaletaColores.primary,
-        ),
-      );
+    
+    // Traducir el nombre del rol visual al enum de la base de datos
+    String rolBD = 'estudiante';
+    if (_rolSeleccionado == 'Encargado de Bar') rolBD = 'admin_bar';
+    if (_rolSeleccionado == 'Administrador') rolBD = 'super_admin';
+
+    try {
+      final supabase = Supabase.instance.client;
+      
+      //  Buscamos al usuario por su correo
+      final userResponse = await supabase.from('usuarios').select('id_usuario').eq('correo', correo).maybeSingle();
+      
+      if (userResponse == null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No existe un usuario con ese correo'), backgroundColor: Colors.red));
+        setState(() => _cargando = false);
+        return;
+      }
+
+      //  Actualizamos el rol en la base de datos
+      await supabase.from('usuarios').update({'rol': rolBD}).eq('id_usuario', userResponse['id_usuario']);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Rol cambiado a "$_rolSeleccionado" correctamente'), backgroundColor: Colors.green),
+        );
+        // ESTO ES LO QUE RECARGA EL PERFIL AL INSTANTE
+        Navigator.pop(context, true); 
+      }
+    } catch (e) {
+      debugPrint('Error al cambiar rol: $e');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al cambiar el rol'), backgroundColor: Colors.red));
+    } finally {
+      if (mounted) setState(() => _cargando = false);
     }
   }
 }

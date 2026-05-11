@@ -98,16 +98,6 @@ class _PantallaLoginState extends State<PantallaLogin> {
                 ),
                 const SizedBox(height: 48),
 
-                /*Text(
-                  'EcoPoli',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: PaletaColores.primary,
-                  ),
-                ),
-                const SizedBox(height: 40),*/
-
                 // ── CAMPO CORREO ─────────────────────────────
                 TextFormField(
                   controller: _correoController,
