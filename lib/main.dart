@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'config/supabase.dart';
 import 'config/paleta_colores.dart';
 import 'pantallas/login.dart';
+import 'pantallas/home.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -58,26 +59,24 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    // Si ya hay sesión activa en Supabase, va directo al Home.
+    // Si no, va al Login. Supabase persiste la sesión automáticamente.
+    final sesionActiva = SupabaseConfig.client.auth.currentSession != null;
+
     return MaterialApp(
       title: 'EcoPoli',
-      debugShowCheckedModeBanner: false, // Quita el banner rojo de "debug"
+      debugShowCheckedModeBanner: false,
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       supportedLocales: const [Locale('es', 'EC')],
       locale: const Locale('es', 'EC'),
-      
-      // tema de la app
       theme: ThemeData(
-        
         colorScheme: ColorScheme.fromSeed(
           seedColor: PaletaColores.primary,
         ),
-        
         scaffoldBackgroundColor: PaletaColores.background,
         fontFamily: 'Roboto',
-        
       ),
-      home: const PantallaLogin(),
-  
+      home: sesionActiva ? const PantallaHome() : const PantallaLogin(),
     );
   }
 }
