@@ -8,7 +8,7 @@ import 'package:eco_poli/pantallas/admin/panel_control.dart';
 import 'package:eco_poli/pantallas/login.dart';
 import 'package:eco_poli/pantallas/perfil/cambiar_foto.dart';
 import 'package:eco_poli/pantallas/perfil/cambiar_nombre.dart';
-import 'package:eco_poli/pantallas/perfil/ajustar_ubicacion.dart';
+//import 'package:eco_poli/pantallas/perfil/ajustar_ubicacion.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:eco_poli/pantallas/admin_bar/retos_IA.dart';
 
@@ -76,7 +76,6 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     }
   }
 
-  // ... (Conserva tu función _cerrarSesion exactamente igual aquí) ...
   Future<void> _cerrarSesion() async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -102,16 +101,14 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
 
   @override
   Widget build(BuildContext context) {
-    // 👇 Esto decide qué rol mostrar a la pantalla
+    // rol mostrar a la pantalla
     final rolMostrado = _modoVistaEstudiante ? 'estudiante' : _rolBaseDatos;
 
     return Scaffold(
       backgroundColor: PaletaColores.background,
-      // 👇 PULL TO REFRESH AQUÍ
       body: RefreshIndicator(
         onRefresh: _cargarDatos,
         color: PaletaColores.primary,
-        // 👇 El physics es obligatorio para que funcione el Refresh
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
@@ -164,7 +161,6 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     );
   }
 
-  // ... (Tu función _seccionResumen y _tarjetaStat se quedan exactamente iguales) ...
   Widget _seccionResumen() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -226,7 +222,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             final huboCambio = await Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaCambiarNombre()));
             if (huboCambio == true) _cargarDatos();
           }),
-          // 👇 PASAMOS LA URL_FOTO A LA SIGUIENTE PANTALLA
+          //  URL_FOTO A LA SIGUIENTE PANTALLA
           _itemOpcion(Icons.photo_camera_outlined, 'Cambiar foto de perfil', onTap: () async {
             final huboCambio = await Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaCambiarFoto(urlActual: _urlFoto)));
             if (huboCambio == true) _cargarDatos();
@@ -235,7 +231,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
 
           _encabezadoSeccion('Ajustes de Sesión'),
           
-          // 👇 EL BOTÓN MÁGICO DE MODO VISTA (Solo visible si tu rol en DB es super_admin o admin_bar)
+          //MODO VISTA (Solo visible si tu rol en DB es super_admin o admin_bar)
           if (_rolBaseDatos == 'super_admin' || _rolBaseDatos == 'admin_bar')
             _itemOpcion(
               _modoVistaEstudiante ? Icons.visibility_off : Icons.visibility,

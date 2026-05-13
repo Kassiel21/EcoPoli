@@ -29,7 +29,7 @@ class _PantallaGestionEstudiantesState extends State<PantallaGestionEstudiantes>
     try {
       final datos = await _supabase
           .from('usuarios')
-          .select('id_usuario, nombre, apellido, correo, rol, estado_usuario, url_foto')
+          .select('id_usuario, nombre, apellido, correo, rol, cant_puntos, estado_usuario, url_foto')
           .order('fecha_creacion', ascending: false);
 
       if (mounted) {

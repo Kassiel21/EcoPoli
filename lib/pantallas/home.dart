@@ -1,3 +1,4 @@
+import 'package:eco_poli/pantallas/retos_ranking.dart';
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
 import 'package:eco_poli/servicios/autenticacion.dart';
@@ -209,7 +210,7 @@ class _PantallaHomeState extends State<PantallaHome> {
       _vistaHome(),                                    // Índice 0: Icono Home
       const Center(child: Text('📍 Bares (Próximamente)')),     // Índice 1: Icono Ubicación
       const PantallaImpacto(),                                  // Índice 2: Icono Calendario
-      const Center(child: Text('🏆 Retos (Próximamente)')),     // Índice 3: Icono Trofeo
+      const PantallaRetos(),   // Índice 3: Icono Trofeo
       const PantallaPerfil(),                                   // Índice 4: Perfil
     ];
 

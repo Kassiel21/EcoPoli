@@ -15,10 +15,12 @@ class _PantallaHistorialUsuarioAdminState extends State<PantallaHistorialUsuario
   final _supabase = Supabase.instance.client;
   bool _estaCargando = true;
   List<Map<String, dynamic>> _actividad = [];
+  int _puntosActuales = 0;
 
   @override
   void initState() {
     super.initState();
+    _puntosActuales = widget.usuario['cant_puntos'] ?? 0;
     _cargarActividad();
   }
 
@@ -27,6 +29,11 @@ class _PantallaHistorialUsuarioAdminState extends State<PantallaHistorialUsuario
     try {
       // Traemos Entregas y Canjes en paralelo
       final idUser = widget.usuario['id_usuario'];
+      final datosUser = await _supabase
+          .from('usuarios')
+          .select('cant_puntos')
+          .eq('id_usuario', idUser)
+          .single();
       
       final entregas = await _supabase.from('entregas').select('*, bares(nombre)').eq('id_usuario', idUser);
       final canjes = await _supabase.from('canjes').select('*, bares(nombre)').eq('id_usuario', idUser);
@@ -45,6 +52,7 @@ class _PantallaHistorialUsuarioAdminState extends State<PantallaHistorialUsuario
 
       if (mounted) {
         setState(() {
+          _puntosActuales = datosUser['cant_puntos'] ?? 0;
           _actividad = temporal;
           _estaCargando = false;
         });
@@ -98,7 +106,7 @@ class _PantallaHistorialUsuarioAdminState extends State<PantallaHistorialUsuario
       decoration: BoxDecoration(color: PaletaColores.primary, borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30))),
       child: Column(
         children: [
-          Text('${widget.usuario['cant_puntos'] ?? 0}', style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white)),
+          Text('$_puntosActuales', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.white)),
           const Text('PUNTOS DISPONIBLES', style: TextStyle(color: Colors.white70, fontSize: 12, letterSpacing: 1.2)),
         ],
       ),
