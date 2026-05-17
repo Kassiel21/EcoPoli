@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
-import 'package:eco_poli/servicios/autenticacion.dart';
+import 'package:eco_poli/config/autenticacion.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PantallaCambiarNombre extends StatefulWidget {

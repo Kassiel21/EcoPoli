@@ -1,7 +1,7 @@
 import 'package:eco_poli/pantallas/home.dart';
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
-import 'package:eco_poli/servicios/autenticacion.dart';
+import 'package:eco_poli/config/autenticacion.dart';
 
 class PantallaBienvenido extends StatefulWidget {
   const PantallaBienvenido({super.key});

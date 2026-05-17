@@ -1,7 +1,8 @@
+import 'package:eco_poli/pantallas/mapa_bares.dart';
 import 'package:eco_poli/pantallas/retos_ranking.dart';
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
-import 'package:eco_poli/servicios/autenticacion.dart';
+import 'package:eco_poli/config/autenticacion.dart';
 import 'package:eco_poli/config/supabase.dart';
 import 'package:eco_poli/pantallas/carrito.dart';
 import 'package:eco_poli/pantallas/notificaciones.dart';
@@ -208,7 +209,7 @@ class _PantallaHomeState extends State<PantallaHome> {
     //  arreglo con todas las pantallas del menú inferior
     final List<Widget> pantallasDelMenu = [
       _vistaHome(),                                    // Índice 0: Icono Home
-      const Center(child: Text('📍 Bares (Próximamente)')),     // Índice 1: Icono Ubicación
+      const PantallaMapaBares(),     // Índice 1: Icono Ubicación
       const PantallaImpacto(),                                  // Índice 2: Icono Calendario
       const PantallaRetos(),   // Índice 3: Icono Trofeo
       const PantallaPerfil(),                                   // Índice 4: Perfil

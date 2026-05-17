@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:eco_poli/pantallas/mapa_selector.dart'; 
 
 class PantallaRequisitos extends StatefulWidget {
   const PantallaRequisitos({super.key});
@@ -14,14 +16,17 @@ class PantallaRequisitos extends StatefulWidget {
 class _PantallaRequisitosState extends State<PantallaRequisitos> {
   final _supabase = Supabase.instance.client;
   
-  // Controladores para todos los campos de tu tabla SQL
   final _controladorNombreBar = TextEditingController();
   final _controladorDescripcion = TextEditingController();
   final _controladorReferencia = TextEditingController();
+  final _controladorDescripcionUbicacion = TextEditingController();
+
+  //  VARIABLES DE MAPA 
+  double? _latitudSeleccionada;
+  double? _longitudSeleccionada;
   
   late String _facultadSeleccionada = _facultades[0]; 
   
-  // Manejo de archivos
   File? _documentoSeleccionado;
   String? _nombreArchivo;
   bool _estaCargando = false;
@@ -41,10 +46,10 @@ class _PantallaRequisitosState extends State<PantallaRequisitos> {
     _controladorNombreBar.dispose();
     _controladorDescripcion.dispose();
     _controladorReferencia.dispose();
+    _controladorDescripcionUbicacion.dispose();
     super.dispose();
   }
 
-  // ── FUNCIÓN 1: SELECCIONAR EL ARCHIVO ──
   Future<void> _seleccionarDocumento() async {
     try {
       FilePickerResult? resultado = await FilePicker.platform.pickFiles(
@@ -59,20 +64,20 @@ class _PantallaRequisitosState extends State<PantallaRequisitos> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al abrir la galería o archivos')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al abrir archivos')));
     }
   }
 
-  // ── FUNCIÓN 2: ENVIAR SOLICITUD A SUPABASE ──
   Future<void> _enviarSolicitud() async {
-    // 1. Validaciones
+    // 👇 VALIDACIÓN DEL MAPA AÑADIDA
     if (_controladorNombreBar.text.trim().isEmpty || _controladorDescripcion.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor, llena el nombre y la descripción del bar.')));
       return;
     }
-    
+    if (_latitudSeleccionada == null || _longitudSeleccionada == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ Debes seleccionar la ubicación en el mapa.')));
+      return;
+    }
     if (_documentoSeleccionado == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Es obligatorio adjuntar el permiso legal.')));
       return;
@@ -84,16 +89,9 @@ class _PantallaRequisitosState extends State<PantallaRequisitos> {
       final authUser = _supabase.auth.currentUser;
       if (authUser == null) throw Exception('Sesión no encontrada');
 
-      // 2. Obtener el id_usuario interno de tu tabla 'usuarios'
-      final datosUsuario = await _supabase
-          .from('usuarios')
-          .select('id_usuario')
-          .eq('auth_id', authUser.id)
-          .single();
-      
+      final datosUsuario = await _supabase.from('usuarios').select('id_usuario').eq('auth_id', authUser.id).single();
       final idUsuarioInterno = datosUsuario['id_usuario'];
 
-      // 3. Subir el documento al Storage
       final nombreArchivoFinal = 'solicitud_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final rutaStorage = 'solicitudes/$nombreArchivoFinal';
       
@@ -105,33 +103,26 @@ class _PantallaRequisitosState extends State<PantallaRequisitos> {
 
       final urlPublica = _supabase.storage.from('documentos_bar').getPublicUrl(rutaStorage);
 
-      // 4. Inserción en la tabla solicitudes_bar
+      // 👇 INSERCIÓN CON LAS COORDENADAS REALES
       await _supabase.from('solicitudes_bar').insert({
         'id_usuario': idUsuarioInterno,
         'nombre_bar': _controladorNombreBar.text.trim(),
         'descripcion': _controladorDescripcion.text.trim(),
         'referencia': _controladorReferencia.text.trim(),
-        'latitud': -1.6587, // Coordenadas temporales ESPOCH
-        'longitud': -78.6773,
-        'imagen_url': urlPublica,
+        'latitud': _latitudSeleccionada,    // Coordenada real
+        'longitud': _longitudSeleccionada,  // Coordenada real
+        'documento_url': urlPublica,        // Corregido el nombre a documento_url
         'estado': 'pendiente',
       });
 
-      // 5. Mensaje de éxito y salir (Corregido)
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('¡Solicitud enviada con éxito!'), backgroundColor: Colors.green)
-        );
-        Navigator.pop(context); // Cierra la pantalla y vuelve al perfil
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('¡Solicitud enviada con éxito!'), backgroundColor: Colors.green));
+        Navigator.pop(context); 
       }
 
     } catch (e) {
       debugPrint('Error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo enviar: $e'), backgroundColor: Colors.red)
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo enviar: $e'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _estaCargando = false);
     }
@@ -154,63 +145,35 @@ class _PantallaRequisitosState extends State<PantallaRequisitos> {
           children: [
             Text('Activa tu Perfil Comercial', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: PaletaColores.textPrimary)),
             const SizedBox(height: 12),
-            Text(
-              'Llena los datos de tu local y adjunta el permiso emitido por la ESPOCH. '
-              'Una vez validada tu documentación, se habilitarán tus funciones de administrador.',
-              style: TextStyle(fontSize: 14, color: PaletaColores.textSecondary, height: 1.5),
-            ),
+            Text('Llena los datos de tu local y adjunta el permiso emitido por la ESPOCH.', style: TextStyle(fontSize: 14, color: PaletaColores.textSecondary, height: 1.5)),
             const SizedBox(height: 30),
 
-            // ── FORMULARIO DE DATOS ──
             const Text('Datos del Establecimiento', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             
             TextField(
               controller: _controladorNombreBar,
-              decoration: InputDecoration(
-                labelText: 'Nombre del bar *',
-                prefixIcon: const Icon(Icons.storefront),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.white,
-              ),
+              decoration: InputDecoration(labelText: 'Nombre del bar *', prefixIcon: const Icon(Icons.storefront), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
             ),
             const SizedBox(height: 16),
 
             TextField(
               controller: _controladorDescripcion,
               maxLines: 2,
-              decoration: InputDecoration(
-                labelText: 'Descripción del bar *',
-                prefixIcon: const Icon(Icons.fastfood_outlined),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.white,
-              ),
+              decoration: InputDecoration(labelText: 'Descripción del bar *', prefixIcon: const Icon(Icons.fastfood_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
             ),
             const SizedBox(height: 16),
             
-            // DropdownButton limpio para evitar el error de "deprecated"
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade400),
-              ),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade400)),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: _facultadSeleccionada,
                   isExpanded: true,
                   icon: const Icon(Icons.arrow_drop_down),
-                  items: _facultades.map((String facultad) {
-                    return DropdownMenuItem<String>(value: facultad, child: Text(facultad, style: const TextStyle(fontSize: 14)));
-                  }).toList(),
-                  onChanged: (String? nuevoValor) {
-                    if (nuevoValor != null) {
-                      setState(() => _facultadSeleccionada = nuevoValor);
-                    }
-                  },
+                  items: _facultades.map((String facultad) => DropdownMenuItem<String>(value: facultad, child: Text(facultad, style: const TextStyle(fontSize: 14)))).toList(),
+                  onChanged: (String? nuevoValor) { if (nuevoValor != null) setState(() => _facultadSeleccionada = nuevoValor); },
                 ),
               ),
             ),
@@ -218,24 +181,56 @@ class _PantallaRequisitosState extends State<PantallaRequisitos> {
 
             TextField(
               controller: _controladorReferencia,
-              decoration: InputDecoration(
-                labelText: 'Referencia de ubicación (Ej: Junto a biblioteca)',
-                prefixIcon: const Icon(Icons.map_outlined),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.white,
+              decoration: InputDecoration(labelText: 'Referencia de ubicación', prefixIcon: const Icon(Icons.map_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: Colors.white),
+            ),
+            const SizedBox(height: 30),
+
+            // 👇 SECCIÓN MAPA REEMPLAZADA POR BOTÓN INTERACTIVO
+            const Text('Ubicación en el Mapa *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                border: Border.all(color: _latitudSeleccionada == null ? Colors.grey.shade400 : PaletaColores.primary, width: 2),
+                borderRadius: BorderRadius.circular(16),
+                color: _latitudSeleccionada == null ? Colors.white : PaletaColores.primary.withValues(alpha: 0.1),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                leading: Icon(
+                  _latitudSeleccionada == null ? Icons.map_outlined : Icons.location_on, 
+                  color: _latitudSeleccionada == null ? Colors.grey : PaletaColores.primary,
+                  size: 32,
+                ),
+                title: Text(
+                  _latitudSeleccionada == null ? 'Fijar ubicación del local' : 'Ubicación Confirmada', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: _latitudSeleccionada == null ? Colors.black87 : PaletaColores.primary)
+                ),
+                subtitle: _latitudSeleccionada != null 
+                    ? Text('Las coordenadas han sido guardadas') 
+                    : const Text('Abre el mapa para colocar el pin'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  // Abre la pantalla del mapa que hicimos en el mensaje anterior
+                  final LatLng? coordenadas = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PantallaMapaSelector()),
+                  );
+                  
+                  if (coordenadas != null) {
+                    setState(() {
+                      _latitudSeleccionada = coordenadas.latitude;
+                      _longitudSeleccionada = coordenadas.longitude;
+                    });
+                  }
+                },
               ),
             ),
             const SizedBox(height: 30),
 
-            // ── SECCIÓN DE DOCUMENTOS ──
             const Text('Documentación Requerida *', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
-            _itemRequisito(Icons.description_outlined, 'Permiso ESPOCH', 'Documento oficial en PDF '),
             
-            const SizedBox(height: 20),
-
-            // ── ZONA DE CARGA DE ARCHIVO ──
             GestureDetector(
               onTap: _seleccionarDocumento,
               child: Container(
@@ -243,37 +238,20 @@ class _PantallaRequisitosState extends State<PantallaRequisitos> {
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 decoration: BoxDecoration(
                   color: _documentoSeleccionado == null ? PaletaColores.primary.withValues(alpha: 0.05) : Colors.green.withValues(alpha: 0.1),
-                  border: Border.all(
-                    color: _documentoSeleccionado == null ? PaletaColores.primary.withValues(alpha: 0.3) : Colors.green,
-                    style: BorderStyle.solid,
-                    width: 2,
-                  ),
+                  border: Border.all(color: _documentoSeleccionado == null ? PaletaColores.primary.withValues(alpha: 0.3) : Colors.green, width: 2),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
                   children: [
-                    Icon(
-                      _documentoSeleccionado == null ? Icons.cloud_upload_outlined : Icons.check_circle_outline, 
-                      size: 40, 
-                      color: _documentoSeleccionado == null ? PaletaColores.primary : Colors.green
-                    ),
+                    Icon(_documentoSeleccionado == null ? Icons.cloud_upload_outlined : Icons.check_circle_outline, size: 40, color: _documentoSeleccionado == null ? PaletaColores.primary : Colors.green),
                     const SizedBox(height: 12),
-                    Text(
-                      _nombreArchivo ?? 'Toca aquí para buscar el archivo',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold, 
-                        color: _documentoSeleccionado == null ? PaletaColores.primary : Colors.green
-                      ),
-                    ),
+                    Text(_nombreArchivo ?? 'Toca aquí para subir el PDF de permiso', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: _documentoSeleccionado == null ? PaletaColores.primary : Colors.green)),
                   ],
                 ),
               ),
             ),
-
             const SizedBox(height: 40),
 
-            // ── BOTÓN ENVIAR SOLICITUD ──
             SizedBox(
               width: double.infinity,
               height: 55,
@@ -283,7 +261,6 @@ class _PantallaRequisitosState extends State<PantallaRequisitos> {
                   backgroundColor: PaletaColores.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 0,
                 ),
                 child: _estaCargando
                     ? const CircularProgressIndicator(color: Colors.white)
@@ -293,32 +270,6 @@ class _PantallaRequisitosState extends State<PantallaRequisitos> {
             const SizedBox(height: 40),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _itemRequisito(IconData icono, String titulo, String descripcion) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: PaletaColores.fieldBackground, borderRadius: BorderRadius.circular(14)),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: PaletaColores.primary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
-            child: Icon(icono, color: PaletaColores.primary, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(titulo, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                Text(descripcion, style: TextStyle(fontSize: 12, color: PaletaColores.textSecondary)),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

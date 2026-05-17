@@ -28,7 +28,7 @@ class _PantallaRevisionSolicitudesState extends State<PantallaRevisionSolicitude
       
       final datos = await _supabase
           .from('solicitudes_bar')
-          .select('*, usuarios!solicitudes_bar_id_usuario_fkey(nombre, apellido)')
+          .select('*, usuarios!solicitudes_bar_id_usuario_fkey(nombre, apellido)') 
           .eq('estado', 'pendiente');
 
       debugPrint('✅ Solicitudes encontradas: $datos'); 
@@ -54,17 +54,25 @@ class _PantallaRevisionSolicitudesState extends State<PantallaRevisionSolicitude
     
     try {
       final uri = Uri.parse(url);
-      // Mode InAppBrowserView fuerza al sistema a abrir una ventanita de navegador dentro de la app
       await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
     } catch (e) {
       debugPrint('Error abriendo url: $e');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al abrir el documento. Verifica el formato de la URL.')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al abrir el documento.')));
     }
   }
 
-  // ── FUNCIÓN PARA APROBAR ──
+  // ── FUNCIÓN PARA APROBAR CON COORDENADAS CORREGIDAS ──
   Future<void> _aprobarSolicitud(Map<String, dynamic> solicitud) async {
     try {
+      final idUsuario = solicitud['id_usuario'];
+      final textoCrudo = solicitud['nombre_bar']?.toString().trim() ?? '';
+      final nombreBar = textoCrudo.isEmpty ? 'Bar Universitario' : textoCrudo;
+      final descripcion = solicitud['descripcion'] ?? 'Sin descripción'; 
+      
+      // 👇 SOLUCIÓN AL ERROR: Extraemos las coordenadas que el estudiante mandó en su solicitud
+      final latitud = solicitud['latitud'] ?? 0.0;
+      final longitud = solicitud['longitud'] ?? 0.0;
+
       // 1. Actualizar el estado de la solicitud
       await _supabase
           .from('solicitudes_bar')
@@ -75,19 +83,104 @@ class _PantallaRevisionSolicitudesState extends State<PantallaRevisionSolicitude
       await _supabase
           .from('usuarios')
           .update({'rol': 'admin_bar'})
-          .eq('id_usuario', solicitud['id_usuario']);
+          .eq('id_usuario', idUsuario);
 
-      // 3. (Opcional) Aquí podrías insertar automáticamente en la tabla 'bares'
-      
+      // 3. Crear el bar automáticamente mandando TODOS los campos obligatorios
+      await _supabase
+          .from('bares')
+          .insert({
+            'id_usuario': idUsuario,
+            'nombre': nombreBar,
+            'descripcion': descripcion,
+            'latitud': latitud,    // ✅ Pasamos la latitud real
+            'longitud': longitud,  // ✅ Pasamos la longitud real
+            'estado_bar': true
+          });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Solicitud aprobada con éxito'), backgroundColor: Colors.green)
+          const SnackBar(content: Text('✅ Solicitud aprobada y Bar registrado con éxito'), backgroundColor: Colors.green)
         );
-        _cargarSolicitudes(); // Recargar lista
+        _cargarSolicitudes(); // Recargar lista automáticamente
+      }
+    } on PostgrestException catch (errorBD) {
+      debugPrint('🚨 Error de Postgres: ${errorBD.message}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error BD: ${errorBD.message}'), backgroundColor: Colors.red));
       }
     } catch (e) {
-      debugPrint('Error al aprobar: $e');
+      debugPrint('Error general: $e');
     }
+  }
+
+  // ── NUEVO: FUNCIÓN PARA RECHAZAR SOLICITUD ──
+  Future<void> _rechazarSolicitud(Map<String, dynamic> solicitud, String motivo) async {
+    try {
+      await _supabase
+          .from('solicitudes_bar')
+          .update({
+            'estado': 'rechazada',
+            'fecha_revision': DateTime.now().toIso8601String(),
+            'razon_rechazo': motivo // Guarda el por qué se negó la solicitud
+          })
+          .eq('id_solicitud', solicitud['id_solicitud']);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('❌ Solicitud rechazada correctamente'), backgroundColor: Colors.orange)
+        );
+        _cargarSolicitudes(); // Refrescar la UI
+      }
+    } catch (e) {
+      debugPrint('Error al rechazar: $e');
+    }
+  }
+
+  // ── NUEVO: VENTANA FLOTANTE PARA CAPTURAR EL MOTIVO ──
+  void _mostrarDialogoRechazo(Map<String, dynamic> solicitud) {
+    final motivoCtrl = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Rechazar Solicitud', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Especifica la razón del rechazo:', style: TextStyle(fontSize: 13, color: Colors.grey)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: motivoCtrl,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Ej: El documento de permiso está expirado...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey))
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade600, foregroundColor: Colors.white),
+            onPressed: () {
+              if (motivoCtrl.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Por favor, ingresa un motivo')));
+                return;
+              }
+              Navigator.pop(ctx); // Cerrar ventana
+              _rechazarSolicitud(solicitud, motivoCtrl.text.trim());
+            },
+            child: const Text('Confirmar Rechazo'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -95,7 +188,7 @@ class _PantallaRevisionSolicitudesState extends State<PantallaRevisionSolicitude
     return Scaffold(
       backgroundColor: PaletaColores.background,
       appBar: AppBar(
-        title: const Text('Revision de Solicitudes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        title: const Text('Revisión de Solicitudes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         backgroundColor: PaletaColores.primary,
         foregroundColor: Colors.white,
       ),
@@ -109,10 +202,7 @@ class _PantallaRevisionSolicitudesState extends State<PantallaRevisionSolicitude
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: _solicitudes.length,
-                    itemBuilder: (context, index) {
-                      final solicitud = _solicitudes[index];
-                      return _tarjetaSolicitud(solicitud);
-                    },
+                    itemBuilder: (context, index) => _tarjetaSolicitud(_solicitudes[index]),
                   ),
                 ),
     );
@@ -133,14 +223,12 @@ class _PantallaRevisionSolicitudesState extends State<PantallaRevisionSolicitude
 
   Widget _tarjetaSolicitud(Map<String, dynamic> solicitud) {
     try {
-      // 1. Variables blindadas contra nulos
       final nombreBar = solicitud['nombre_bar']?.toString() ?? 'Sin nombre';
       final descripcion = solicitud['descripcion']?.toString() ?? 'Sin descripción';
       final referencia = solicitud['referencia']?.toString() ?? 'No especificada';
-      final urlPermiso = solicitud['imagen_url']?.toString();
+      final urlPermiso = solicitud['documento_url']?.toString(); 
       
-      // 2. Extracción segura del usuario (Considerando el alias de la llave foránea)
-      final datosUsuario = solicitud['usuarios'] ?? solicitud['usuarios!solicitudes_bar_id_usuario_fkey'] ?? {};
+      final datosUsuario = solicitud['usuarios'] ?? {};
       final nombreUsuario = datosUsuario['nombre']?.toString() ?? 'Usuario';
       final apellidoUsuario = datosUsuario['apellido']?.toString() ?? 'Desconocido';
 
@@ -166,7 +254,6 @@ class _PantallaRevisionSolicitudesState extends State<PantallaRevisionSolicitude
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 👇 AQUÍ USAMOS LAS VARIABLES SEGURAS
                       Text(nombreBar, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                       Text('Solicitado por: $nombreUsuario $apellidoUsuario', style: TextStyle(fontSize: 12, color: PaletaColores.textSecondary)),
                     ],
@@ -179,32 +266,51 @@ class _PantallaRevisionSolicitudesState extends State<PantallaRevisionSolicitude
             const SizedBox(height: 8),
             Text('📍 Ref: $referencia', style: TextStyle(fontSize: 12, color: PaletaColores.textSecondary, fontStyle: FontStyle.italic)),
             const SizedBox(height: 20),
+            
+            // ── FILA 1: VER PERMISO (ANCHO COMPLETO) ──
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _verDocumento(urlPermiso),
+                icon: Icon(urlPermiso != null ? Icons.description_outlined : Icons.cancel_outlined, size: 18),
+                label: Text(urlPermiso != null ? 'Ver Permiso Adjunto' : 'Sin Archivo', style: const TextStyle(fontSize: 13)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: urlPermiso != null ? PaletaColores.primary : Colors.grey,
+                  side: BorderSide(color: urlPermiso != null ? PaletaColores.primary : Colors.grey),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // ── FILA 2: ACCIONES (RECHAZAR | APROBAR) ──
             Row(
               children: [
-                // Botón Ver Documento
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _verDocumento(urlPermiso),
-                    icon: Icon(urlPermiso != null ? Icons.description_outlined : Icons.cancel_outlined, size: 18),
-                    label: Text(urlPermiso != null ? 'Ver Permiso' : 'Sin Archivo', style: const TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: urlPermiso != null ? PaletaColores.primary : Colors.grey,
-                      side: BorderSide(color: urlPermiso != null ? PaletaColores.primary : Colors.grey),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _mostrarDialogoRechazo(solicitud),
+                    icon: const Icon(Icons.close, size: 18),
+                    label: const Text('Rechazar'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade600,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                // Botón Aprobar
+                const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _aprobarSolicitud(solicitud),
                     icon: const Icon(Icons.check, size: 18),
                     label: const Text('Aprobar'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: Colors.green.shade600,
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
@@ -216,7 +322,7 @@ class _PantallaRevisionSolicitudesState extends State<PantallaRevisionSolicitude
     } catch (e) {
       return Container(
         padding: const EdgeInsets.all(16),
-        color: Colors.red.withValues(alpha: 0.1),
+        color: Colors.red.withValues(alpha:0.1),
         child: Text('Error pintando tarjeta: $e', style: const TextStyle(color: Colors.red)),
       );
     }

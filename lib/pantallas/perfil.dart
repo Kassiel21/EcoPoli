@@ -1,9 +1,10 @@
-import 'package:eco_poli/pantallas/historial_canjes.dart';
+import 'package:eco_poli/pantallas/perfil/historial_canjes.dart';
+import 'package:eco_poli/pantallas/perfil/ajustar_ubicacion.dart';
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
-import 'package:eco_poli/servicios/autenticacion.dart';
+import 'package:eco_poli/config/autenticacion.dart';
 import 'package:eco_poli/pantallas/admin/cambio_rol.dart';
-import 'package:eco_poli/pantallas/admin/requisitos.dart';
+import 'package:eco_poli/pantallas/perfil/solicitud_bar.dart';
 import 'package:eco_poli/pantallas/admin/panel_control.dart';
 import 'package:eco_poli/pantallas/login.dart';
 import 'package:eco_poli/pantallas/perfil/cambiar_foto.dart';
@@ -11,6 +12,8 @@ import 'package:eco_poli/pantallas/perfil/cambiar_nombre.dart';
 //import 'package:eco_poli/pantallas/perfil/ajustar_ubicacion.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:eco_poli/pantallas/admin_bar/retos_IA.dart';
+import 'package:eco_poli/pantallas/admin_bar/recepcion_botellas.dart';
+import 'package:eco_poli/pantallas/admin_bar/escaner_canjes.dart';
 
 class PantallaPerfil extends StatefulWidget {
   const PantallaPerfil({super.key});
@@ -61,7 +64,7 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
 
       if (mounted) {
         setState(() {
-          _nombre = '${respuestaUser['nombre']} ${respuestaUser['apellido']}';
+          _nombre = '${respuestaUser['nombre']}' ;
           _correo = usuarioActual.email ?? '';
           _rolBaseDatos = respuestaUser['rol'] ?? 'estudiante';
           _urlFoto = respuestaUser['url_foto'];
@@ -212,12 +215,34 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           
           if (rolMostrado == 'admin_bar' || rolMostrado == 'super_admin') ...[
             _encabezadoSeccion('Gestión del Bar (Admin)'),
-           _itemOpcion(Icons.smart_toy_rounded, 'Generar retos semanales', subtitulo: 'Crear 5 retos con Inteligencia Artificial', colorTexto: PaletaColores.primary, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaGenerarRetosIA()))),
+           _itemOpcion(Icons.smart_toy_rounded, 'Generar retos semanales', subtitulo: 'Crear 5 retos con Inteligencia Artificial', colorTexto: PaletaColores.textPrimary, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaGenerarRetosIA()))),
+            _itemOpcion(
+              Icons.add_chart_rounded,
+              'Recepción de Botellas',
+              subtitulo: 'Asignar puntos a un estudiante',
+              colorIcono: PaletaColores.primary,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const PantallaRecepcionBotellas()),
+                );
+              },
+            ),
+            _itemOpcion(
+              Icons.qr_code_scanner,
+              'Escanear Ticket',
+              subtitulo: 'Validar canje de productos',
+              colorIcono: PaletaColores.primary,
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaEscanerCanjes()));
+              },
+            ),
             const SizedBox(height: 16),
           ],
 
           _encabezadoSeccion('Información Personal'),
           _itemOpcion(Icons.person_outline, 'Mis canjes', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaHistorial()))),
+          
           _itemOpcion(Icons.person_outline, 'Cambiar nombre de usuario', onTap: () async {
             final huboCambio = await Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaCambiarNombre()));
             if (huboCambio == true) _cargarDatos();
@@ -228,21 +253,15 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
             if (huboCambio == true) _cargarDatos();
           }),
           const SizedBox(height: 16),
-
-          _encabezadoSeccion('Ajustes de Sesión'),
           
-          //MODO VISTA (Solo visible si tu rol en DB es super_admin o admin_bar)
-          if (_rolBaseDatos == 'super_admin' || _rolBaseDatos == 'admin_bar')
-            _itemOpcion(
-              _modoVistaEstudiante ? Icons.visibility_off : Icons.visibility,
-              _modoVistaEstudiante ? 'Salir de Vista Estudiante' : 'Ver como Estudiante',
-              colorTexto: Colors.deepPurple,
-              onTap: () {
-                setState(() => _modoVistaEstudiante = !_modoVistaEstudiante);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_modoVistaEstudiante ? 'Modo Estudiante activado (Ocultando opciones admin)' : 'Modo Administrador restaurado')));
-              }
-            ),
-
+          _encabezadoSeccion('Ajustes de Sesión'),
+          //ajustar ubicacion
+          _itemOpcion(Icons.gps_fixed_outlined, 'Ajustar ubicación', onTap: () async {
+            final huboCambio = await Navigator.push(context, MaterialPageRoute(builder: (_) => PantallaAjustarUbicacion()));
+            if (huboCambio == true) _cargarDatos();
+          }),
+          
+          //cambio de rol
           if (_rolBaseDatos == 'super_admin')
             _itemOpcion(Icons.swap_horiz, 'Cambiar rol', subtitulo: 'Herramienta administrativa', onTap: () async {
               final huboCambio = await Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaCambioRol()));
@@ -257,7 +276,18 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
               await Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaPanelControl()));
               _cargarDatos(); // Recargar al volver
             }),
-          
+            
+          //MODO VISTA (Solo visible si tu rol en DB es super_admin o admin_bar)
+          if (_rolBaseDatos == 'super_admin' || _rolBaseDatos == 'admin_bar')
+            _itemOpcion(
+              _modoVistaEstudiante ? Icons.visibility_off : Icons.visibility,
+              _modoVistaEstudiante ? 'Salir de Vista Estudiante' : 'Ver como Estudiante',
+              colorTexto: Colors.deepPurple,
+              onTap: () {
+                setState(() => _modoVistaEstudiante = !_modoVistaEstudiante);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_modoVistaEstudiante ? 'Modo Estudiante activado (Ocultando opciones admin)' : 'Modo Administrador restaurado')));
+              }
+            ),
           const SizedBox(height: 8),
           const Divider(),
           _itemOpcion(Icons.logout, 'Cerrar Sesión', colorTexto: PaletaColores.error, onTap: _cerrarSesion),
@@ -270,11 +300,16 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
     return Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(titulo, style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w600, color: PaletaColores.textPrimary)));
   }
 
-  Widget _itemOpcion(IconData icono, String titulo, {String? subtitulo, Color? colorTexto, VoidCallback? onTap}) {
+  // 👇 Le agregamos "colorIcono" como variable separada
+  Widget _itemOpcion(IconData icono, String titulo, {String? subtitulo, Color? colorIcono, Color? colorTexto, VoidCallback? onTap}) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: PaletaColores.fieldBackground, borderRadius: BorderRadius.circular(10)), child: Icon(icono, color: colorTexto ?? PaletaColores.primary, size: 20)),
-      title: Text(titulo, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: colorTexto ?? PaletaColores.textPrimary)),
+      leading: Container(
+        padding: const EdgeInsets.all(8), 
+        decoration: BoxDecoration(color: PaletaColores.fieldBackground, borderRadius: BorderRadius.circular(10)), 
+        child: Icon(icono, color: colorIcono ?? PaletaColores.primary, size: 20) // 👈 Pinta solo el icono
+      ),
+      title: Text(titulo, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: colorTexto ?? PaletaColores.textPrimary)), 
       subtitle: subtitulo != null ? Text(subtitulo, style: TextStyle(fontSize: 12, color: PaletaColores.textSecondary)) : null,
       trailing: Icon(Icons.chevron_right, color: PaletaColores.textSecondary, size: 20),
       onTap: onTap,

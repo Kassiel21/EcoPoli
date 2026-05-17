@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:eco_poli/config/paleta_colores.dart';
-import 'package:eco_poli/servicios/autenticacion.dart';
+import 'package:eco_poli/config/autenticacion.dart';
 import 'package:eco_poli/pantallas/registro.dart';
 import 'package:eco_poli/pantallas/bienvenido.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart'; 

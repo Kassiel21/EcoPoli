@@ -13,11 +13,12 @@ class PantallaEscanerCanjes extends StatefulWidget {
 class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
   final _supabase = Supabase.instance.client;
   bool _procesando = false;
-  MobileScannerController _scannerController = MobileScannerController();
+  final MobileScannerController _scannerController = MobileScannerController();
 
-  // ── 1. LECTURA DEL CÓDIGO ──
+  // ── LECTURA DEL CÓDIGO (CÁMARA) ──
   Future<void> _alDetectarCodigo(BarcodeCapture captura) async {
-    if (_procesando) return; // Evita escanear 100 veces el mismo código en 1 segundo
+    // Seguro lógico: Ignora lecturas si ya está procesando uno
+    if (_procesando) return; 
     
     final List<Barcode> codigos = captura.barcodes;
     if (codigos.isEmpty || codigos.first.rawValue == null) return;
@@ -25,15 +26,53 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
     final String codigoEscaneado = codigos.first.rawValue!;
     
     setState(() => _procesando = true);
-    _scannerController.pause(); // Pausamos la cámara mientras validamos
+    // ❌ Se eliminó el .pause() para evitar congelamientos en Android
 
     await _validarCanjeEnBaseDatos(codigoEscaneado);
   }
 
-  // ── 2. VALIDACIÓN EN SUPABASE ──
+  // ── INGRESO MANUAL DE CÓDIGO ──
+  void _mostrarDialogoManual() {
+    final codigoCtrl = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Ingresar código ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: codigoCtrl,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(
+            hintText: 'Ejemplo: ECO-X7Y8',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            prefixIcon: const Icon(Icons.keyboard),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text('Cancelar', style: TextStyle(color: Colors.grey))
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: PaletaColores.primary, foregroundColor: Colors.white),
+            onPressed: () {
+              if (codigoCtrl.text.trim().isEmpty) return;
+              Navigator.pop(ctx);
+              setState(() => _procesando = true);
+              _validarCanjeEnBaseDatos(codigoCtrl.text.trim());
+            },
+            child: const Text('Validar Ticket'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  
+  // ── VALIDACIÓN EN SUPABASE (CON CADUCIDAD DE 24H) ──
   Future<void> _validarCanjeEnBaseDatos(String codigo) async {
     try {
-      // Buscamos el canje y traemos los datos del usuario y los productos
       final canje = await _supabase
           .from('canjes')
           .select('*, usuarios(nombre, apellido), canje_prod(cantidad, productos(nombre))')
@@ -49,6 +88,16 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
 
       final estado = canje['estado'];
 
+      //  24 HORAS 
+      final fechaExpiracion = DateTime.parse(canje['fecha_expiracion']);
+      final horaActual = DateTime.now();
+
+      if (estado == 'pendiente' && horaActual.isAfter(fechaExpiracion)) {
+        await _supabase.from('canjes').update({'estado': 'expirado'}).eq('id_canje', canje['id_canje']);
+        _mostrarAlertaError('Este ticket caducó. Expiró el: ${fechaExpiracion.toLocal().toString().split('.')[0]}');
+        return;
+      }
+
       if (estado == 'confirmado') {
         _mostrarAlertaError('Este ticket ya fue entregado anteriormente.');
         return;
@@ -59,7 +108,6 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
         return;
       }
 
-      // Si todo está bien, mostramos el resumen del pedido para entregar
       _mostrarResumenPedido(canje);
 
     } catch (e) {
@@ -68,7 +116,7 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
     }
   }
 
-  // ── 3. MOSTRAR PEDIDO Y CONFIRMAR ──
+  // ── MOSTRAR PEDIDO Y CONFIRMAR ──
   void _mostrarResumenPedido(Map<String, dynamic> canje) {
     final nombreEstudiante = '${canje['usuarios']['nombre']} ${canje['usuarios']['apellido']}';
     final List productos = canje['canje_prod'] ?? [];
@@ -97,7 +145,6 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
             const Text('Productos a entregar:', style: TextStyle(fontSize: 14, color: Colors.grey)),
             const SizedBox(height: 10),
             
-            // Lista de productos
             ...productos.map((prod) => Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
               child: Row(
@@ -127,8 +174,8 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
-                      Navigator.pop(ctx); // Cierra el modal
-                      await _confirmarEntrega(canje['id_canje']); // Confirma en BD
+                      Navigator.pop(ctx); 
+                      await _confirmarEntrega(canje['id_canje']); 
                     },
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
                     child: const Text('Confirmar Entrega', style: TextStyle(fontWeight: FontWeight.bold)),
@@ -142,7 +189,7 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
     );
   }
 
-  // ── 4. ACTUALIZAR BASE DE DATOS ──
+  // ── ACTUALIZAR BASE DE DATOS ──
   Future<void> _confirmarEntrega(String idCanje) async {
     try {
       await _supabase.from('canjes').update({
@@ -152,36 +199,42 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Entrega registrada exitosamente'), backgroundColor: Colors.green));
-        Navigator.pop(context); // Cierra el escáner y vuelve al inicio del barman
+        Navigator.pop(context); // Cierra el escáner
       }
     } catch (e) {
       _mostrarAlertaError('Error al guardar la confirmación.');
     }
   }
 
+  // ── MANEJO DE ERRORES FLUIDO ──
   void _mostrarAlertaError(String mensaje) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Row(children: [Icon(Icons.error_outline, color: Colors.red), SizedBox(width: 8), Text('Alerta')]),
-        content: Text(mensaje),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _reanudarEscaner();
-            },
-            child: const Text('Entendido'),
-          )
-        ],
-      ),
+    if (!mounted) return;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white), 
+            const SizedBox(width: 8), 
+            Expanded(child: Text(mensaje))
+          ]
+        ),
+        backgroundColor: Colors.red.shade600,
+        duration: const Duration(seconds: 2), 
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      )
     );
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) _reanudarEscaner();
+    });
   }
 
   void _reanudarEscaner() {
-    setState(() => _procesando = false);
-    _scannerController.start();
+    if (mounted) {
+      setState(() => _procesando = false);
+    }
   }
 
   @override
@@ -202,41 +255,68 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
         actions: [
           IconButton(
             icon: const Icon(Icons.flash_on),
+            tooltip: 'Linterna',
             onPressed: () => _scannerController.toggleTorch(),
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Stack(
         children: [
+          // LA CÁMARA
           MobileScanner(
             controller: _scannerController,
             onDetect: _alDetectarCodigo,
           ),
           
-          // Capa visual (Overlay oscuro con cuadro transparente en el medio)
-          Container(
-            decoration: ShapeDecoration(
-              shape: QrScannerOverlayShape(
-                borderColor: PaletaColores.primary,
-                borderRadius: 12,
-                borderLength: 30,
-                borderWidth: 8,
-                cutOutSize: MediaQuery.of(context).size.width * 0.7,
+          //  EL MARCO SEGURO 
+          Positioned.fill(
+            child: Center(
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.7,
+                height: MediaQuery.of(context).size.width * 0.7,
+                decoration: BoxDecoration(
+                  border: Border.all(color: PaletaColores.primary, width: 4),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      spreadRadius: 10000, 
+                      blurRadius: 0,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
           
-          // Texto de ayuda
+          //  EL BOTÓN MANUAL ABAJO
           Positioned(
-            bottom: 60,
+            bottom: 40,
             left: 0,
             right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
-                child: const Text('Apunta la cámara al código QR del estudiante', style: TextStyle(color: Colors.white)),
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+                  child: const Text('Apunta al código QR con la cámara', style: TextStyle(color: Colors.white)),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: _mostrarDialogoManual,
+                  icon: const Icon(Icons.keyboard_alt_outlined),
+                  label: const Text('Ingresar Código ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: PaletaColores.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 4,
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -249,80 +329,4 @@ class _PantallaEscanerCanjesState extends State<PantallaEscanerCanjes> {
       ),
     );
   }
-}
-
-// ── CLASE AUXILIAR PARA DIBUJAR EL RECUADRO DEL ESCÁNER ──
-class QrScannerOverlayShape extends ShapeBorder {
-  final Color borderColor;
-  final double borderWidth;
-  final Color overlayColor;
-  final double borderRadius;
-  final double borderLength;
-  final double cutOutSize;
-
-  QrScannerOverlayShape({
-    this.borderColor = Colors.red,
-    this.borderWidth = 3.0,
-    this.overlayColor = const Color.fromRGBO(0, 0, 0, 80),
-    this.borderRadius = 0,
-    this.borderLength = 40,
-    this.cutOutSize = 250,
-  });
-
-  @override
-  EdgeInsetsGeometry get dimensions => const EdgeInsets.all(10);
-
-  @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) {
-    return Path()
-      ..fillType = PathFillType.evenOdd
-      ..addPath(getOuterPath(rect), Offset.zero);
-  }
-
-  @override
-  Path getOuterPath(Rect rect, {TextDirection? textDirection}) {
-    Path getLeftTopPath(Rect rect) {
-      return Path()
-        ..moveTo(rect.left, rect.bottom)
-        ..lineTo(rect.left, rect.top)
-        ..lineTo(rect.right, rect.top);
-    }
-    return getLeftTopPath(rect)
-      ..lineTo(rect.right, rect.bottom)
-      ..lineTo(rect.left, rect.bottom)
-      ..lineTo(rect.left, rect.top);
-  }
-
-  @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    final width = rect.width;
-    final borderWidthSize = width / 2;
-    final height = rect.height;
-    final borderOffset = borderWidth / 2;
-    final mBorderLength = borderLength > cutOutSize / 2 ? cutOutSize / 2 : borderLength;
-    final mBorderRadius = borderRadius > cutOutSize / 2 ? cutOutSize / 2 : borderRadius;
-
-    final backgroundPaint = Paint()..color = overlayColor..style = PaintingStyle.fill;
-    final borderPaint = Paint()..color = borderColor..style = PaintingStyle.stroke..strokeWidth = borderWidth;
-    final boxPaint = Paint()..color = borderColor..style = PaintingStyle.fill..blendMode = BlendMode.dstOut;
-
-    final cutOutRect = Rect.fromLTWH(
-      rect.left + width / 2 - cutOutSize / 2 + borderOffset,
-      rect.top + height / 2 - cutOutSize / 2 + borderOffset,
-      cutOutSize - borderOffset * 2,
-      cutOutSize - borderOffset * 2,
-    );
-
-    canvas.drawRect(rect, backgroundPaint);
-    canvas.drawRRect(RRect.fromRectAndRadius(cutOutRect, Radius.circular(mBorderRadius)), boxPaint);
-    
-    // Esquinas del marco
-    canvas.drawPath(Path()..moveTo(cutOutRect.left, cutOutRect.top + mBorderLength)..lineTo(cutOutRect.left, cutOutRect.top + mBorderRadius)..arcToPoint(Offset(cutOutRect.left + mBorderRadius, cutOutRect.top), radius: Radius.circular(mBorderRadius))..lineTo(cutOutRect.left + mBorderLength, cutOutRect.top), borderPaint);
-    canvas.drawPath(Path()..moveTo(cutOutRect.right, cutOutRect.top + mBorderLength)..lineTo(cutOutRect.right, cutOutRect.top + mBorderRadius)..arcToPoint(Offset(cutOutRect.right - mBorderRadius, cutOutRect.top), radius: Radius.circular(mBorderRadius))..lineTo(cutOutRect.right - mBorderLength, cutOutRect.top), borderPaint);
-    canvas.drawPath(Path()..moveTo(cutOutRect.left, cutOutRect.bottom - mBorderLength)..lineTo(cutOutRect.left, cutOutRect.bottom - mBorderRadius)..arcToPoint(Offset(cutOutRect.left + mBorderRadius, cutOutRect.bottom), radius: Radius.circular(mBorderRadius), clockwise: false)..lineTo(cutOutRect.left + mBorderLength, cutOutRect.bottom), borderPaint);
-    canvas.drawPath(Path()..moveTo(cutOutRect.right, cutOutRect.bottom - mBorderLength)..lineTo(cutOutRect.right, cutOutRect.bottom - mBorderRadius)..arcToPoint(Offset(cutOutRect.right - mBorderRadius, cutOutRect.bottom), radius: Radius.circular(mBorderRadius), clockwise: false)..lineTo(cutOutRect.right - mBorderLength, cutOutRect.bottom), borderPaint);
-  }
-
-  @override
-  ShapeBorder scale(double t) => QrScannerOverlayShape(borderColor: borderColor, borderWidth: borderWidth, overlayColor: overlayColor);
 }
