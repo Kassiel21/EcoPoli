@@ -82,34 +82,41 @@ class _PantallaImpactoState extends State<PantallaImpacto> {
   }
 
   // cargar actividades cuando cambia la fecha
+  // ── SOLUCIÓN: FILTRO DE FECHAS EN EL LADO DEL CLIENTE ──
   Future<void> _cargarActividadesDelDia(String userIdUuid) async {
-    // rango del día (00:00:00 a 23:59:59) en UTC para Supabase
-    final inicioDiaUtc = DateTime(_fechaSeleccionada.year, _fechaSeleccionada.month, _fechaSeleccionada.day).toUtc().toIso8601String();
-    final finDiaUtc = DateTime(_fechaSeleccionada.year, _fechaSeleccionada.month, _fechaSeleccionada.day, 23, 59, 59).toUtc().toIso8601String();
-
     try {
-      final respuestaHistorial = await _supabase            //  tabla 'historial_puntos' 
+      // 1. Pedimos TODO el historial del estudiante (Supabase nos manda esto en milisegundos)
+      final respuestaHistorial = await _supabase            
           .from('historial_puntos')
           .select()
           .eq('id_usuario', userIdUuid)
-          .gte('fecha_creacion', inicioDiaUtc) // Mayor o igual que inicio
-          .lte('fecha_creacion', finDiaUtc)   // Menor o igual que fin
-          .order('fecha_creacion', ascending: false); // Más recientes primero
+          .order('fecha_creacion', ascending: false); 
 
       List<Map<String, dynamic>> actividadesFormateadas = [];
+      
       for (var registro in respuestaHistorial) {
+        // 2. Supabase lo manda en Hora Universal (UTC). Aquí lo pasamos a la hora local exacta del celular.
         final fechaLocal = DateTime.parse(registro['fecha_creacion']).toLocal();
-        actividadesFormateadas.add({
-          'hora': DateFormat('HH:mm').format(fechaLocal),
-          'titulo': registro['puntos'] > 0 ? 'Puntos Ganados ⬆️' : 'Puntos Canjeados ⬇️',
-          'descripcion': registro['descripcion'] ?? 'Actividad del día',
-          'puntos': registro['puntos'], //  valor real (ej: +50 o -100)
-        });
+        
+        // 3. Comparamos los días exactos en nuestra zona horaria
+        if (fechaLocal.year == _fechaSeleccionada.year && 
+            fechaLocal.month == _fechaSeleccionada.month && 
+            fechaLocal.day == _fechaSeleccionada.day) {
+            
+          actividadesFormateadas.add({
+            'hora': DateFormat('HH:mm').format(fechaLocal),
+            'titulo': registro['puntos'] > 0 ? 'Puntos Ganados ⬆️' : 'Puntos Canjeados ⬇️',
+            'descripcion': registro['descripcion'] ?? 'Actividad del día',
+            'puntos': registro['puntos'], 
+          });
+        }
       }
 
-      setState(() {
-        _actividades = actividadesFormateadas;
-      });
+      if (mounted) {
+        setState(() {
+          _actividades = actividadesFormateadas;
+        });
+      }
 
     } catch (e) {
       debugPrint('❌ Error cargando historial: $e');

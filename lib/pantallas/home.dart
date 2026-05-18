@@ -26,6 +26,7 @@ class _PantallaHomeState extends State<PantallaHome> {
   List<dynamic> _productos = []; 
   List<dynamic> _productosFiltrados = [];
   List<Map<String, dynamic>> _carrito = [];
+  final PageController _pageController = PageController();
 
   @override
   void initState() {
@@ -206,24 +207,42 @@ class _PantallaHomeState extends State<PantallaHome> {
 
   @override
   Widget build(BuildContext context) {
-    //  arreglo con todas las pantallas del menú inferior
     final List<Widget> pantallasDelMenu = [
-      _vistaHome(),                                    // Índice 0: Icono Home
-      const PantallaMapaBares(),     // Índice 1: Icono Ubicación
-      const PantallaImpacto(),                                  // Índice 2: Icono Calendario
-      const PantallaRetos(),   // Índice 3: Icono Trofeo
-      const PantallaPerfil(),                                   // Índice 4: Perfil
+      _vistaHome(),                  
+      const PantallaMapaBares(),     
+      const PantallaImpacto(),       
+      const PantallaRetos(),         
+      const PantallaPerfil(),        
     ];
 
     return Scaffold(
       backgroundColor: PaletaColores.background,
-      // body cambia según el botón presionado
-      body: pantallasDelMenu[_paginaActual], 
+      
+      // 👇 NUEVO: PageView permite deslizar con el dedo
+      body: PageView(
+        controller: _pageController,
+        physics: const BouncingScrollPhysics(), // Efecto rebote suave al deslizar
+        onPageChanged: (index) {
+          setState(() => _paginaActual = index);
+          // MAGIA: Si regresa a la pestaña 0 (Home), recarga los datos automáticamente
+          if (index == 0) {
+            _refrescarPantalla();
+          }
+        },
+        children: pantallasDelMenu,
+      ), 
 
       // BARRA INFERIOR 
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _paginaActual,
-        onTap: (index) => setState(() => _paginaActual = index),
+        // 👇 NUEVO: Al tocar un icono, se desliza animado hacia esa pantalla
+        onTap: (index) {
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: PaletaColores.primary,
         unselectedItemColor: PaletaColores.textSecondary,
@@ -406,9 +425,11 @@ class _PantallaHomeState extends State<PantallaHome> {
   void _mostrarDetalleProducto(Map<String, dynamic> producto) {
     final nombreProducto = producto['nombre'] ?? 'Producto sin nombre';
     final precioPuntos = producto['puntos_costo'] ?? 0;
-    final descripcion = producto['descripcion'] ?? 'Delicioso producto disponible en el bar de tu facultad.';
+    final descripcion = producto['descripcion'] ?? 'Producto disponible en el bar de tu facultad.';
+    final int stock = producto['stock'] ?? 0;
+    final bool agotado = stock <= 0;
 
-    // 1. Declaramos el controlador y la cantidad ANTES del modal
+    //  controlador y la cantidad ANTES del modal
     int cantidadSeleccionada = 1;
     final controladorCantidad = TextEditingController(text: '1');
 
@@ -421,7 +442,7 @@ class _PantallaHomeState extends State<PantallaHome> {
           builder: (BuildContext context, StateSetter setStateModal) {
             
             return Padding(
-              // 👇 ESTO ES MAGIA: Empuja el modal hacia arriba cuando sale el teclado
+              // modal hacia arriba cuando sale el teclado
               padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
               child: Container(
                 padding: const EdgeInsets.all(24),
@@ -444,12 +465,23 @@ class _PantallaHomeState extends State<PantallaHome> {
                     // Imagen
                     Center(
                       child: Container(
-                        width: 120, height: 120,
+                        width: 70, 
+                        height: 70,
                         decoration: BoxDecoration(
-                          color: PaletaColores.textPrimary.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
+                          color: agotado ? Colors.grey.shade400 : PaletaColores.textPrimary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle, 
                         ),
-                        child: Icon(Icons.fastfood_outlined, size: 60, color: PaletaColores.primary),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: (producto['imagen_prod'] != null && producto['imagen_prod'].toString().isNotEmpty)
+                              ? Image.network(
+                                  producto['imagen_prod'], 
+                                  fit: BoxFit.cover,
+                                  // Si hay error cargando la imagen, muestra el icono
+                                  errorBuilder: (context, error, stackTrace) => Icon(Icons.fastfood_outlined, color: PaletaColores.textPrimary, size: 35),
+                                )
+                              : Icon(Icons.fastfood_outlined, color: PaletaColores.textPrimary, size: 35),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -485,7 +517,7 @@ class _PantallaHomeState extends State<PantallaHome> {
                     Text(descripcion, style: TextStyle(fontSize: 15, color: PaletaColores.textPrimary, height: 1.5)),
                     const SizedBox(height: 24),
 
-                    //  SELECTOR DE CANTIDAD (Con texto manual)
+                    //  SELECTOR DE CANTIDAD 
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -520,7 +552,7 @@ class _PantallaHomeState extends State<PantallaHome> {
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                   decoration: const InputDecoration(
-                                    border: InputBorder.none, // Sin borde porque ya lo tiene el contenedor
+                                    border: InputBorder.none, 
                                     isDense: true,
                                     contentPadding: EdgeInsets.zero,
                                   ),
@@ -565,7 +597,6 @@ class _PantallaHomeState extends State<PantallaHome> {
                       child: ElevatedButton(
                         onPressed: () {
                           Navigator.pop(context);
-                          // Me imagino que aquí usas tu función _agregarAlCarrito original
                            _agregarAlCarrito(producto, cantidad: cantidadSeleccionada);
                         },
                         style: ElevatedButton.styleFrom(

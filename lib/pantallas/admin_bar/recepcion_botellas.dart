@@ -90,20 +90,29 @@ class _PantallaRecepcionBotellasState extends State<PantallaRecepcionBotellas> {
       // Insertar en Entregas
       final idBarman = (await _supabase.from('usuarios').select('id_usuario').eq('auth_id', miId).single())['id_usuario'];
 
-      //  Insertar en Entregas (¡Ahora con todos los datos!)
-      await _supabase.from('entregas').insert({
+      final nuevaEntrega = await _supabase.from('entregas').insert({
         'id_usuario': idEstudiante,
         'id_bar': datosBar['id_bar'],
         'cantidad_botellas': cantBotellas,
         'puntos_asignados': puntosAsignados,
         'estado': 'validada',
         'registrado_por': idBarman 
-      });
+      }).select('id_entrega').single();
 
       // Sumar puntos al estudiante
+      final nuevosPuntos = puntosActuales + puntosAsignados;
       await _supabase.from('usuarios').update({
         'cant_puntos': puntosActuales + puntosAsignados
       }).eq('id_usuario', idEstudiante);
+
+      //  RECIBO PARA MI IMPACTO
+      await _supabase.from('historial_puntos').insert({
+        'id_usuario': idEstudiante,
+        'id_entrega': nuevaEntrega['id_entrega'],
+        'puntos': puntosAsignados, 
+        'descripcion': 'Reciclaje de $cantBotellas botellas',
+        'saldo_post': nuevosPuntos
+      });
 
       // Éxito
       _mostrarMensaje('¡Se añadieron $puntosAsignados puntos al estudiante!', esError: false);

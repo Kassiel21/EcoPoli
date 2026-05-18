@@ -58,7 +58,7 @@ class _PantallaCarritoState extends State<PantallaCarrito> {
     });
   }
 
-  // ✍️ Ingresar cantidad manualmente con teclado
+  //  Ingresar cantidad manualmente 
   void _ingresarCantidadManual(int index) {
     final TextEditingController controlador = TextEditingController(
       text: widget.carrito[index]['cantidad'].toString(),
@@ -150,10 +150,19 @@ class _PantallaCarritoState extends State<PantallaCarrito> {
                           crossAxisAlignment: CrossAxisAlignment.start, // Alinea la imagen arriba
                           children: [
                             // 1. IMAGEN DEL PRODUCTO (Izquierda)
-                            CircleAvatar(
-                              radius: 25, // Un poquito más grande
-                              backgroundColor: PaletaColores.primary.withValues(alpha: 0.1),
-                              child: Icon(Icons.fastfood, color: PaletaColores.primary, size: 28),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                width: 55, height: 55,
+                                color: Colors.grey.shade200,
+                                child: (item['imagen_prod'] != null && item['imagen_prod'].toString().isNotEmpty)
+                                    ? Image.network(
+                                        item['imagen_prod'], 
+                                        fit: BoxFit.cover, 
+                                        errorBuilder: (ctx, err, stack) => Icon(Icons.fastfood, color: PaletaColores.primary)
+                                      )
+                                    : Icon(Icons.fastfood, color: PaletaColores.primary),
+                              ),
                             ),
                             const SizedBox(width: 16),
 
@@ -297,6 +306,56 @@ class _PantallaCarritoState extends State<PantallaCarrito> {
                       ),
                       onPressed: (puedeCanjear && widget.carrito.isNotEmpty)
                         ? () async {
+                            for (var item in widget.carrito) {
+                              final cantPedida = item['cantidad'] ?? 1;
+                              final stockDisponible = item['stock'] ?? 0;
+                              
+                              if (cantPedida > stockDisponible) {
+                                
+                                // 👇 NUEVO DISEÑO: Alerta Pop-up Premium
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) => Dialog(
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(24.0),
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(16),
+                                            decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), shape: BoxShape.circle),
+                                            child: const Icon(Icons.inventory_2_outlined, color: Colors.orange, size: 45),
+                                          ),
+                                          const SizedBox(height: 20),
+                                          const Text('¡Stock Insuficiente!', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            'Lo sentimos, en este momento solo quedan $stockDisponible unidades de "${item['nombre']}".\n\nPor favor, ajusta la cantidad en tu carrito.',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(fontSize: 15, color: Colors.grey.shade800, height: 1.4),
+                                          ),
+                                          const SizedBox(height: 28),
+                                          SizedBox(
+                                            width: double.infinity,
+                                            height: 50,
+                                            child: ElevatedButton(
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: PaletaColores.primary, 
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+                                              ),
+                                              onPressed: () => Navigator.pop(ctx),
+                                              child: const Text('Entendido', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                                            ),
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                );
+                                return; 
+                              }
+                            }
                             try {
                               // 1. Obtener el auth_id del usuario conectado
                               final authId = SupabaseConfig.client.auth.currentUser?.id;
@@ -349,6 +408,14 @@ class _PantallaCarritoState extends State<PantallaCarrito> {
                                   .from('usuarios')
                                   .update({'cant_puntos': nuevosPuntos})
                                   .eq('id_usuario', idUsuario);
+                              
+                              await SupabaseConfig.client.from('historial_puntos').insert({
+                                'id_usuario': idUsuario,
+                                'id_canje': idCanjeGenerado,
+                                'puntos': -totalPuntos, // En negativo porque se gastaron
+                                'descripcion': 'Canje de productos en el bar',
+                                'saldo_post': nuevosPuntos
+                              });
 
                               // 7. Limpiar y navegar al Ticket visual
                               final copiaProductos = List<Map<String, dynamic>>.from(widget.carrito);
