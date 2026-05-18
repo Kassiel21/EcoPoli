@@ -4,7 +4,6 @@ import 'package:eco_poli/config/paleta_colores.dart';
 import 'package:eco_poli/config/autenticacion.dart';
 import 'package:eco_poli/pantallas/login.dart';
 import 'package:eco_poli/pantallas/perfil/historial_canjes.dart';
-import 'package:eco_poli/pantallas/perfil/ajustar_ubicacion.dart';
 import 'package:eco_poli/pantallas/perfil/cambiar_foto.dart';
 import 'package:eco_poli/pantallas/perfil/cambiar_nombre.dart';
 import 'package:eco_poli/pantallas/perfil/solicitud_bar.dart';
@@ -288,11 +287,6 @@ class _PantallaPerfilState extends State<PantallaPerfil> {
           const SizedBox(height: 16),
           
           _encabezadoSeccion('Ajustes y Sesión'),
-          _itemOpcion(Icons.gps_fixed_outlined, 'Ajustar mi ubicación', onTap: () async {
-            final huboCambio = await Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaAjustarUbicacion()));
-            if (huboCambio == true) _cargarDatos();
-          }),
-          
           if (rolMostrado == 'estudiante')
             _itemOpcion(Icons.store_outlined, 'Solicitar ser Bar', subtitulo: 'Formulario de registro para locales', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PantallaRequisitos()))),
             

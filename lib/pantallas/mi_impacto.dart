@@ -83,29 +83,33 @@ class _PantallaImpactoState extends State<PantallaImpacto> {
 
   // cargar actividades cuando cambia la fecha
   // ── SOLUCIÓN: FILTRO DE FECHAS EN EL LADO DEL CLIENTE ──
+  // ── CARGAR ACTIVIDADES FORMATEADAS DESDE LA HORA LOCAL DE ECUADOR ──
   Future<void> _cargarActividadesDelDia(String userIdUuid) async {
     try {
-      // 1. Pedimos TODO el historial del estudiante (Supabase nos manda esto en milisegundos)
       final respuestaHistorial = await _supabase            
           .from('historial_puntos')
           .select()
           .eq('id_usuario', userIdUuid)
           .order('fecha_creacion', ascending: false); 
 
+      // 🔍 DIAGNÓSTICO: Ver en consola cuántos recibos existen en la base
+      debugPrint('📢 Total de recibos encontrados en la base de datos: ${respuestaHistorial.length}');
+
       List<Map<String, dynamic>> actividadesFormateadas = [];
       
+      // Formato de comparación simple: "2026-05-18"
+      final String fechaFiltroTexto = DateFormat('yyyy-MM-dd').format(_fechaSeleccionada);
+
       for (var registro in respuestaHistorial) {
-        // 2. Supabase lo manda en Hora Universal (UTC). Aquí lo pasamos a la hora local exacta del celular.
+        // Pasamos la fecha UTC de Supabase a la hora local del dispositivo (GMT-5)
         final fechaLocal = DateTime.parse(registro['fecha_creacion']).toLocal();
+        final String fechaRegistroTexto = DateFormat('yyyy-MM-dd').format(fechaLocal);
         
-        // 3. Comparamos los días exactos en nuestra zona horaria
-        if (fechaLocal.year == _fechaSeleccionada.year && 
-            fechaLocal.month == _fechaSeleccionada.month && 
-            fechaLocal.day == _fechaSeleccionada.day) {
-            
+        // Si coinciden exactamente en el mismo día del calendario
+        if (fechaRegistroTexto == fechaFiltroTexto) {
           actividadesFormateadas.add({
             'hora': DateFormat('HH:mm').format(fechaLocal),
-            'titulo': registro['puntos'] > 0 ? 'Puntos Ganados ⬆️' : 'Puntos Canjeados ⬇️',
+            'titulo': registro['puntos'] > 0 ? 'Puntos Ganados ' : 'Puntos Canjeados ',
             'descripcion': registro['descripcion'] ?? 'Actividad del día',
             'puntos': registro['puntos'], 
           });
