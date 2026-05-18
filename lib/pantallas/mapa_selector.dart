@@ -61,10 +61,10 @@ class _PantallaMapaSelectorState extends State<PantallaMapaSelector> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Ubicación Actual', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const Text('Ubicación Actual', style: TextStyle(color: Colors.black87, fontSize: 15)),
                   const SizedBox(height: 4),
                   Text(
-                    'Lat: ${_centroActual.latitude.toStringAsFixed(5)}\nLng: ${_centroActual.longitude.toStringAsFixed(5)}',
+                    'Latitud: ${_centroActual.latitude.toStringAsFixed(5)}\nLongitud: ${_centroActual.longitude.toStringAsFixed(5)}',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: PaletaColores.primary),
                   ),

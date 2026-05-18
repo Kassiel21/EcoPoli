@@ -21,7 +21,8 @@ class _PantallaHomeState extends State<PantallaHome> {
   final _servicioAuth = Autenticacion();
   String _nombre = '';
   int _paginaActual = 0;
-  int _puntos = 0; 
+  int _puntos = 0;
+  String? _urlFoto; 
   List<dynamic> _productos = []; 
   List<dynamic> _productosFiltrados = [];
   List<Map<String, dynamic>> _carrito = [];
@@ -61,11 +62,11 @@ class _PantallaHomeState extends State<PantallaHome> {
     try {
       // Traemos todos los productos de la base
       final lista = await SupabaseConfig.client
-      .from('productos').select('id_producto, nombre, descripcion, puntos_costo, stock');
+      .from('productos').select('id_producto, nombre, descripcion, puntos_costo, stock, imagen_prod');
       
       setState(() {
         _productos = lista;
-        _productosFiltrados = lista; // Al inicio mostramos todos
+        _productosFiltrados = lista; 
       });
     } catch (e) {
       debugPrint('Error obteniendo productos: $e');
@@ -132,7 +133,6 @@ class _PantallaHomeState extends State<PantallaHome> {
   }
 
   // UI
-  
   Widget _vistaHome() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -243,8 +243,6 @@ class _PantallaHomeState extends State<PantallaHome> {
     );
   }
 
-  // MÉTODOS DE UI 
-  // ════════════════════════════════════════════════════════
 
   // ── HEADER 
   Widget _headerFusionado() {
@@ -611,7 +609,7 @@ class _PantallaHomeState extends State<PantallaHome> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color:agotado? Colors.grey.shade200:PaletaColores.fieldBackground, // Blanco o Gris super claro
+          color:agotado? Colors.grey.shade200:PaletaColores.fieldBackground, 
           borderRadius: BorderRadius.circular(20),
           // Si está agotado
           boxShadow: agotado?[]:[
@@ -635,10 +633,15 @@ class _PantallaHomeState extends State<PantallaHome> {
                     color: agotado ? Colors.grey.shade400 : PaletaColores.textPrimary.withValues(alpha: 0.1),
                     shape: BoxShape.circle, 
                   ),
-                  child: Icon(
-                    Icons.fastfood_outlined, 
-                    color: PaletaColores.textPrimary,
-                    size: 35,
+                  child: ClipOval(
+                    child: (producto['imagen_prod'] != null && producto['imagen_prod'].toString().isNotEmpty)
+                        ? Image.network(
+                            producto['imagen_prod'], 
+                            fit: BoxFit.cover,
+                            // Si hay error cargando la imagen, muestra el icono
+                            errorBuilder: (context, error, stackTrace) => Icon(Icons.fastfood_outlined, color: PaletaColores.textPrimary, size: 35),
+                          )
+                        : Icon(Icons.fastfood_outlined, color: PaletaColores.textPrimary, size: 35),
                   ),
                 ),
                 const SizedBox(height: 12),
